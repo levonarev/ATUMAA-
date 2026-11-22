@@ -10,27 +10,29 @@ The whole world scrolls with every swipe, like a feed.
 | Signal | Gesture (touch) | Keyboard / mouse |
 | --- | --- | --- |
 | Pulse | Swipe up | ↑ or W, scroll wheel, drag up |
-| Draw | Swipe down | ↓ or S, scroll wheel back, drag down |
+| Echo | Swipe down | ↓ or S, scroll wheel back, drag down |
 | Flare | Double-tap | Space, double-click |
 | Lock | Press and hold | Hold Shift, hold mouse button |
-| Void | Do nothing, let it pass | — |
+| Gap (missing time) | Do nothing, let it pass | — |
 
-A ten-second opening shows the premise and every gesture. Then seven seats, each a new world
-that adds one complication on top of the last:
+The meter is time: a full bar is the 5 minutes 21 seconds each of the six is missing.
+
+A ten-second opening gives the premise from the trailer (November 2026, asteroid 1998 KY26 is
+accelerating, it is sending a signal) and shows every gesture. Then seven seats, each a place
+from the trailer that adds one complication on top of the last:
 
 | Seat | World | Adds |
 | --- | --- | --- |
-| I | Launch Ring | Pulse and Draw |
-| II | Ice Moon | Flare |
-| III | Dust Belt | The Void |
-| IV | Drowned Station | Lock |
-| V | Green Vault | Bound signals (several gestures in a row) |
-| VI | Mirror Reach | Mirrored signals (swipe the opposite way) |
+| I | The Listening Room | Pulse and Echo |
+| II | Launch | Flare |
+| III | The Crossing | Gaps of missing time |
+| IV | 1998 KY26 | Lock |
+| V | The Corridor | Bound signals (several gestures in a row) |
+| VI | Twin Suns | Mirrored signals (swipe the opposite way) |
 | VII | The Seventh Seat | Cloaked signals (revealed late) |
 
-After Seat VII the game continues in faster cycles. World names, the premise line and the
-signal names are placeholders kept in the `WORLDS`, `INTRO` and `ELEMENTS` tables at the top of
-`game.js`, so they can be replaced with the film's own.
+After Seat VII the game continues in faster cycles. Story text is kept in the `WORLDS`, `INTRO`
+and `ELEMENTS` tables at the top of `game.js`.
 
 ## Run locally
 

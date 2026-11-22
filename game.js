@@ -1,11 +1,12 @@
-/* Atumaa — The Seventh Seat. One-thumb reel gestures, plain canvas, no dependencies. */
+/* Atumaa — The Seventh Seat. One-thumb reel gestures, plain canvas, no dependencies.
+   Story beats follow the film's trailer: the signal, the launch, 1998 KY26, the corridor, the twin suns, the seats. */
 (() => {
   'use strict';
 
   // Each signal is answered with one of the gestures people already use on short-video feeds.
   const ELEMENTS = [
     { name: 'Pulse', rgb: '125,220,132', note: 392.0, gesture: 'up' },
-    { name: 'Draw', rgb: '95,201,243', note: 440.0, gesture: 'down' },
+    { name: 'Echo', rgb: '95,201,243', note: 440.0, gesture: 'down' },
     { name: 'Flare', rgb: '255,200,87', note: 523.25, gesture: 'like' },
     { name: 'Lock', rgb: '185,160,255', note: 587.33, gesture: 'hold' },
   ];
@@ -13,20 +14,20 @@
   // The seven seats. Story text lives here so it can be swapped for the film's own names.
   // Each seat adds one complication on top of everything before it.
   const WORLDS = [
-    { name: 'Launch Ring', adds: 'Pulse and Draw: swipe up, swipe down', bg: '#05070d', glow: '40,58,96', speck: '190,210,255', side: [18, 24, 40], shape: 'girders', accent: '150,190,255' },
-    { name: 'Ice Moon', adds: 'Flare: double-tap', bg: '#050b10', glow: '50,92,112', speck: '200,240,255', side: [20, 44, 58], shape: 'shards', accent: '150,230,255' },
-    { name: 'Dust Belt', adds: 'The Void: never touch it', bg: '#0d0805', glow: '104,66,34', speck: '255,214,160', side: [44, 26, 12], shape: 'dunes', accent: '255,180,110' },
-    { name: 'Drowned Station', adds: 'Lock: press and hold', bg: '#030c0c', glow: '26,88,84', speck: '160,255,235', side: [8, 40, 40], shape: 'kelp', accent: '110,240,215' },
-    { name: 'Green Vault', adds: 'Bound signals: answer each in turn', bg: '#060d09', glow: '34,66,46', speck: '170,235,170', side: [6, 22, 14], shape: 'pines', accent: '150,235,150' },
-    { name: 'Mirror Reach', adds: 'Mirrored signals: swipe the opposite way', bg: '#0c0510', glow: '86,40,104', speck: '250,190,255', side: [40, 14, 52], shape: 'crystals', accent: '240,150,255' },
-    { name: 'The Seventh Seat', adds: 'Cloaked signals: revealed at the last moment', bg: '#090705', glow: '104,84,34', speck: '255,236,170', side: [26, 20, 8], shape: 'pillars', accent: '255,220,130' },
+    { name: 'The Listening Room', adds: 'Pulse and Echo: swipe up, swipe down', bg: '#040a0c', glow: '18,70,72', speck: '255,190,120', side: [10, 34, 38], shape: 'girders', accent: '90,235,190' },
+    { name: 'Launch', adds: 'Flare: double-tap', bg: '#120b08', glow: '120,70,48', speck: '255,220,190', side: [50, 28, 20], shape: 'pillars', accent: '255,190,140' },
+    { name: 'The Crossing', adds: 'Gaps of missing time: never touch them', bg: '#030408', glow: '30,36,60', speck: '220,225,255', side: [26, 28, 36], shape: 'crystals', accent: '200,210,255' },
+    { name: '1998 KY26', adds: 'Lock: press and hold', bg: '#070605', glow: '92,66,26', speck: '255,215,150', side: [36, 32, 28], shape: 'shards', accent: '255,196,110' },
+    { name: 'The Corridor', adds: 'Bound signals: answer each in turn', bg: '#04070a', glow: '30,70,90', speck: '255,200,140', side: [86, 62, 40], shape: 'screens', accent: '255,190,120' },
+    { name: 'Twin Suns', adds: 'Mirrored signals: swipe the opposite way', bg: '#0a0612', glow: '110,60,150', speck: '255,180,230', side: [44, 22, 60], shape: 'dunes', accent: '255,140,170' },
+    { name: 'The Seventh Seat', adds: 'Cloaked signals: revealed at the last moment', bg: '#050505', glow: '70,60,40', speck: '255,220,150', side: [24, 24, 26], shape: 'pillars', accent: '255,214,130' },
   ];
   const INTRO = [
     { el: 0, dur: 2.1, touch: 'Swipe up', desk: 'Swipe up  ·  ↑' },
     { el: 1, dur: 2.1, touch: 'Swipe down', desk: 'Swipe down  ·  ↓' },
     { el: 2, dur: 2.1, touch: 'Double-tap', desk: 'Double-tap  ·  Space' },
     { el: 3, dur: 2.1, touch: 'Press and hold', desk: 'Hold  ·  Shift' },
-    { el: -1, dur: 1.6, touch: 'Never touch the Void', desk: 'Never touch the Void' },
+    { el: -1, dur: 1.6, touch: 'Never touch a Gap', desk: 'Never touch a Gap' },
   ];
   const INTRO_TOTAL = INTRO.reduce((s, b) => s + b.dur, 0); // 10 seconds
 
@@ -41,7 +42,7 @@
   const ctx = canvas.getContext('2d');
   const ui = {
     hud: $('hud'), grove: $('grove'), pips: $('pips'), light: $('light'), score: $('score'),
-    hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
+    clock: $('clock'), hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
     finalScore: $('final-score'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
@@ -84,6 +85,10 @@
       f.beginPath();
       f.moveTo(x - s * 0.4, y + s * 0.7); f.lineTo(x + s * 0.1, y - s * 1.2); f.lineTo(x + s * 0.5, y + s * 0.7);
       f.closePath(); f.fill();
+    } else if (kind === 'screens') {
+      f.fillRect(x - s * 0.5, y - s * 0.32, s, s * 0.64);
+      f.fillStyle = 'rgba(255,225,180,0.16)';
+      f.fillRect(x - s * 0.5, y - s * 0.02, s, s * 0.1);
     } else if (kind === 'dunes') {
       f.beginPath();
       f.ellipse(x, y, s * 1.9, s * 0.5, 0, Math.PI, TAU);
@@ -258,7 +263,7 @@
     spawnTimer = 1.2;
     ui.grove.textContent = seatLabel();
     buildBackdrop();
-    showBanner(seatLabel() + '<small>' + world().name + (level <= 7 ? ' · ' + world().adds : ' · faster') + '</small>', 2.4);
+    showBanner(world().name + '<small>' + seatLabel() + (level <= 7 ? ' · ' + world().adds : ' · faster') + '</small>', 2.4);
   }
 
   function resetRun() {
@@ -345,7 +350,7 @@
     if (t.shade) {
       if (g === 'hold') return;
       t.wob = 0.35;
-      penalty(0.12, 'It feeds on your touch', targetX(t), t.y);
+      penalty(0.12, 'You lost time', targetX(t), t.y);
       return;
     }
     if (needOf(t) === g) answer(t, t.seq[t.done]);
@@ -418,8 +423,8 @@
     targets = [];
     rings.push({ x: field.cx, y: field.heartY, r: 20, max: Math.max(W, H) * 1.1, life: 1.6, rgb: world().accent });
     scrollKick = 2600 * U;
-    showBanner(level === 7 ? 'The Seventh Seat is yours<small>All seven hold · +' + bonus + ' · the dark keeps coming</small>'
-      : seatLabel() + ' holds<small>' + world().name + ' secured · +' + bonus + '</small>', 2.3);
+    showBanner(level === 7 ? 'The seventh seat is taken<small>It was looking for you · +' + bonus + ' · the signal goes on</small>'
+      : world().name + '<small>' + seatLabel() + ' answered · +' + bonus + '</small>', 2.3);
     ui.hint.hidden = true;
     sfx.dawn();
   }
@@ -485,7 +490,7 @@
           shake = 0.35;
           heartPulse = 1;
           burst(field.cx, field.heartY, '255,120,110', 24, 260);
-          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Breach', life: 1, rgb: '255,150,140', size: 18 });
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Missed', life: 1, rgb: '255,150,140', size: 18 });
           sfx.leak();
         }
         clearedOne();
@@ -541,12 +546,15 @@
 
   /* ---------- HUD ---------- */
   const HINTS = TOUCH
-    ? ['Pulse: swipe up', 'Draw: swipe down', 'Flare: double-tap', 'Lock: press and hold']
-    : ['Pulse: swipe up, scroll, or press ↑', 'Draw: swipe down, scroll back, or press ↓', 'Flare: double-click or press Space', 'Lock: hold the mouse button or Shift'];
-  let lastHint = '', lastPips = '';
+    ? ['Pulse: swipe up', 'Echo: swipe down', 'Flare: double-tap', 'Lock: press and hold']
+    : ['Pulse: swipe up, scroll, or press ↑', 'Echo: swipe down, scroll back, or press ↓', 'Flare: double-click or press Space', 'Lock: hold the mouse button or Shift'];
+  let lastHint = '', lastPips = '', lastClock = '';
   function updateHud() {
     ui.score.textContent = score.toLocaleString();
     ui.light.style.width = (light * 100).toFixed(1) + '%';
+    const secs = Math.ceil(clamp(light, 0, 1) * 321);
+    const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+    if (clock !== lastClock) { lastClock = clock; ui.clock.textContent = clock; }
     ui.light.classList.toggle('low', light < 0.25 && mode === 'play');
     const pips = cleared + ' / ' + goal;
     if (pips !== lastPips) { lastPips = pips; ui.pips.textContent = pips; }
@@ -554,7 +562,7 @@
     if (mode === 'play') {
       const t = front();
       if (t) {
-        if (t.shade) { if (learned.void < 2) hint = 'The Void. Do not touch. Let it scroll past'; }
+        if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
         else if (isCloaked(t)) { if (learned.cloak < 2) hint = 'Cloaked: it shows itself close to the seat'; }
         else if (t.mirror) { if (learned.mirror < 3) hint = 'Mirrored: swipe the opposite way'; }
         else if (learned[t.seq[t.done]] < 3) hint = HINTS[t.seq[t.done]];
@@ -818,9 +826,10 @@
 
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(200,215,255,0.8)';
-    ctx.font = `${Math.round(12.5 * U)}px ${FONT}`;
-    ctx.fillText('SEVEN SEATS HOLD BACK THE DARK.', cx, field.top - 14 * U);
-    ctx.fillText('SIX HAVE FALLEN SILENT. TAKE THEM BACK.', cx, field.top + 6 * U);
+    ctx.font = `700 ${Math.round(Math.min(11.5 * U, W / 36))}px ${FONT}`;
+    ctx.fillText('NOVEMBER 2026. ASTEROID 1998 KY26 IS ACCELERATING.', cx, field.top - 14 * U);
+    ctx.fillStyle = 'rgba(230,196,106,0.95)';
+    ctx.fillText('IT IS SENDING A SIGNAL. ANSWER IT.', cx, field.top + 6 * U);
     const capA = clamp(Math.min(k * 6, (1 - k) * 6), 0, 1);
     ctx.fillStyle = `rgba(255,251,230,${capA})`;
     ctx.font = `600 ${Math.round(30 * U)}px ${FONT}`;
@@ -966,7 +975,7 @@
       ctx.fill();
     }
 
-    // the dark closes in as power fades
+    // the dark closes in as time runs out
     const dark = clamp(1 - light, 0, 1) * 0.72;
     if (dark > 0.02) {
       const g = ctx.createRadialGradient(hx, hy, 60 * U, hx, hy, H);

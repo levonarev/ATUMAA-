@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Atumaa — The Seventh Seat</title>
-<meta name="description" content="Atumaa: The Seventh Seat is a one-thumb sci-fi arcade puzzle. Swipe, double-tap and hold the way you scroll reels to hold seven worlds against the dark.">
+<meta name="description" content="Atumaa: The Seventh Seat. Asteroid 1998 KY26 is sending a signal. Answer it with one thumb, the way you scroll reels, across seven worlds from the film.">
 <meta name="theme-color" content="#05070d">
 <meta property="og:title" content="Atumaa — The Seventh Seat">
-<meta property="og:description" content="A one-thumb sci-fi arcade puzzle. Seven seats, seven worlds, one scrolling thumb.">
+<meta property="og:description" content="Asteroid 1998 KY26 is sending a signal. Answer it with one thumb.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://atumaa.com/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -22,7 +22,7 @@
     <div id="pips" aria-label="Signals answered at this seat"></div>
   </div>
   <div class="hud-mid">
-    <div class="light-label">Power</div>
+    <div class="light-label">Time <span id="clock">5:21</span></div>
     <div class="light-track"><div id="light"></div></div>
   </div>
   <div class="hud-right">
@@ -42,7 +42,7 @@
   <div class="panel">
     <h1>ATUMAA</h1>
     <p class="tagline">The Seventh Seat</p>
-    <p class="premise">Seven seats hold back the dark. Six have fallen silent. Take them back, one world at a time, with one thumb.</p>
+    <p class="premise">November 2026. Asteroid 1998 KY26 is accelerating. Six people heard its signal. There are seven seats. Answer it.</p>
     <button id="btn-start" class="primary" type="button">Begin</button>
     <p class="controls">A ten-second briefing shows every move. You play it the way you scroll reels: swipe up, swipe down, double-tap, hold. Keyboard: ↑ ↓ Space, hold Shift.</p>
     <p id="best-title" class="best"></p>
@@ -58,7 +58,7 @@
 
 <section id="screen-over" class="screen" hidden>
   <div class="panel small">
-    <h2>The seat has fallen</h2>
+    <h2>The signal is lost</h2>
     <p class="final">Score <strong id="final-score">0</strong></p>
     <p id="final-detail" class="controls"></p>
     <p id="best-over" class="best"></p>
