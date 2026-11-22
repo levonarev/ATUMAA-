@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Atumaa — Wake the Grove</title>
+<meta name="description" content="Atumaa is a mythic arcade puzzle. Guide a forest spirit, gather elemental motes in the right order and wake the standing stones before night swallows the grove.">
+<meta name="theme-color" content="#07100c">
+<meta property="og:title" content="Atumaa — Wake the Grove">
+<meta property="og:description" content="A mythic arcade puzzle. Gather motes, wake the stones, hold back the night.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://atumaa.com/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="Atumaa game field"></canvas>
+
+<header id="hud" hidden>
+  <div class="hud-left">
+    <div id="grove">Grove I</div>
+    <div id="pips" aria-label="Stones woken this grove"></div>
+  </div>
+  <div class="hud-mid">
+    <div class="light-label">Light</div>
+    <div class="light-track"><div id="light"></div></div>
+  </div>
+  <div class="hud-right">
+    <div id="score">0</div>
+    <div class="hud-buttons">
+      <button id="btn-sound" type="button" aria-label="Toggle sound" title="Sound (M)">♪</button>
+      <button id="btn-pause" type="button" aria-label="Pause" title="Pause (P)">Ⅱ</button>
+    </div>
+  </div>
+</header>
+
+<div id="hint" hidden></div>
+<div id="banner" hidden></div>
+<button id="btn-release" type="button" hidden>Release <kbd>Space</kbd></button>
+
+<section id="screen-title" class="screen">
+  <div class="panel">
+    <h1>ATUMAA</h1>
+    <p class="tagline">Wake the grove before night falls</p>
+    <ol class="how">
+      <li><span class="dot leaf"></span>Drift into glowing motes. They trail behind you in the order you gather them.</li>
+      <li><span class="dot sun"></span>Each standing stone asks for signs in sequence. The mote nearest you is always offered first.</li>
+      <li><span class="dot water"></span>Wrong mote in front? Release it, then gather it again to send it to the back.</li>
+      <li><span class="dot moon"></span>Shades scatter your trail and steal light. A waking stone banishes any shade close by.</li>
+    </ol>
+    <button id="btn-start" class="primary" type="button">Enter the grove</button>
+    <p class="controls">Mouse or finger to move · WASD / arrows also work · Space to release</p>
+    <p id="best-title" class="best"></p>
+  </div>
+</section>
+
+<section id="screen-pause" class="screen" hidden>
+  <div class="panel small">
+    <h2>Paused</h2>
+    <button id="btn-resume" class="primary" type="button">Resume</button>
+  </div>
+</section>
+
+<section id="screen-over" class="screen" hidden>
+  <div class="panel small">
+    <h2>Night has fallen</h2>
+    <p class="final">Score <strong id="final-score">0</strong></p>
+    <p id="final-detail" class="controls"></p>
+    <p id="best-over" class="best"></p>
+    <button id="btn-again" class="primary" type="button">Try again</button>
+  </div>
+</section>
+
+<script src="game.js"></script>
+</body>
+</html>
