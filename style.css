@@ -33,7 +33,6 @@ canvas#game {
   height: 100%;
   display: block;
   touch-action: none;
-  cursor: crosshair;
 }
 
 [hidden] { display: none !important; }
@@ -52,12 +51,7 @@ canvas#game {
   background: linear-gradient(rgba(4, 10, 7, 0.75), rgba(4, 10, 7, 0));
 }
 #grove { font-size: 17px; letter-spacing: 0.08em; }
-#pips { display: flex; gap: 5px; margin-top: 5px; }
-#pips i {
-  width: 9px; height: 9px; border-radius: 50%;
-  border: 1px solid rgba(255, 200, 87, 0.6);
-}
-#pips i.on { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+#pips { margin-top: 3px; font-size: 13px; color: var(--gold); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
 
 .light-label {
   font-size: 11px; letter-spacing: 0.25em; text-transform: uppercase;
@@ -91,7 +85,7 @@ canvas#game {
 .hud-buttons button.off { opacity: 0.4; text-decoration: line-through; }
 
 #hint {
-  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translateX(-50%);
   max-width: min(90vw, 460px);
   padding: 8px 16px; border-radius: 18px;
   background: rgba(6, 16, 11, 0.72);
@@ -115,24 +109,6 @@ canvas#game {
   20%, 75% { opacity: 1; transform: none; }
   100% { opacity: 0; }
 }
-
-#btn-release {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(18px, env(safe-area-inset-bottom));
-  min-width: 108px; height: 54px; padding: 0 18px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 200, 87, 0.5);
-  background: rgba(20, 34, 22, 0.85);
-  color: var(--ink); font-family: inherit; font-size: 16px;
-  cursor: pointer; touch-action: manipulation;
-}
-#btn-release:active { background: rgba(255, 200, 87, 0.25); }
-#btn-release kbd {
-  font-family: inherit; font-size: 11px; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; margin-left: 6px;
-}
-@media (hover: none) { #btn-release kbd { display: none; } }
 
 /* ---------- Screens ---------- */
 .screen {
@@ -172,6 +148,8 @@ h2 { margin: 0 0 16px; font-weight: 400; font-size: 28px; letter-spacing: 0.1em;
 .dot.sun { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
 .dot.water { background: var(--water); box-shadow: 0 0 10px var(--water); }
 .dot.moon { background: var(--moon); box-shadow: 0 0 10px var(--moon); }
+.dot.shade { background: #0b0612; border: 1.5px solid #a06ee6; box-shadow: 0 0 10px #6a3aa8; }
+.how b { font-weight: 400; color: #fff3c4; letter-spacing: 0.05em; }
 
 button.primary {
   padding: 13px 30px; border-radius: 30px;

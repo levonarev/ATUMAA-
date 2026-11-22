@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Atumaa — Wake the Grove</title>
-<meta name="description" content="Atumaa is a mythic arcade puzzle. Guide a forest spirit, gather elemental motes in the right order and wake the standing stones before night swallows the grove.">
+<title>Atumaa — Scroll the Grove</title>
+<meta name="description" content="Atumaa is a one-thumb mythic arcade puzzle. Swipe, double-tap and hold the way you scroll reels to answer the signs rushing at the heart of the grove.">
 <meta name="theme-color" content="#07100c">
-<meta property="og:title" content="Atumaa — Wake the Grove">
-<meta property="og:description" content="A mythic arcade puzzle. Gather motes, wake the stones, hold back the night.">
+<meta property="og:title" content="Atumaa — Scroll the Grove">
+<meta property="og:description" content="A one-thumb arcade puzzle. Scroll the grove, answer the signs, hold back the night.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://atumaa.com/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -19,7 +19,7 @@
 <header id="hud" hidden>
   <div class="hud-left">
     <div id="grove">Grove I</div>
-    <div id="pips" aria-label="Stones woken this grove"></div>
+    <div id="pips" aria-label="Signs answered this grove"></div>
   </div>
   <div class="hud-mid">
     <div class="light-label">Light</div>
@@ -36,20 +36,20 @@
 
 <div id="hint" hidden></div>
 <div id="banner" hidden></div>
-<button id="btn-release" type="button" hidden>Release <kbd>Space</kbd></button>
 
 <section id="screen-title" class="screen">
   <div class="panel">
     <h1>ATUMAA</h1>
-    <p class="tagline">Wake the grove before night falls</p>
+    <p class="tagline">Scroll the grove before night falls</p>
     <ol class="how">
-      <li><span class="dot leaf"></span>Drift into glowing motes. They trail behind you in the order you gather them.</li>
-      <li><span class="dot sun"></span>Each standing stone asks for signs in sequence. The mote nearest you is always offered first.</li>
-      <li><span class="dot water"></span>Wrong mote in front? Release it, then gather it again to send it to the back.</li>
-      <li><span class="dot moon"></span>Shades scatter your trail and steal light. A waking stone banishes any shade close by.</li>
+      <li><span class="dot leaf"></span><b>Leaf</b> · swipe up, the way you flick to the next reel.</li>
+      <li><span class="dot water"></span><b>Water</b> · swipe down to draw it into the heart.</li>
+      <li><span class="dot sun"></span><b>Sun</b> · double-tap to kindle it.</li>
+      <li><span class="dot moon"></span><b>Moon</b> · press and hold to still it.</li>
+      <li><span class="dot shade"></span><b>Shade</b> · do nothing. It feeds on your touch, so let it scroll past.</li>
     </ol>
     <button id="btn-start" class="primary" type="button">Enter the grove</button>
-    <p class="controls">Mouse or finger to move · WASD / arrows also work · Space to release</p>
+    <p class="controls">One thumb, anywhere on the screen. Signs rush at the heart; answer the nearest one first. On a keyboard: ↑ ↓ Space and hold Shift, or the scroll wheel.</p>
     <p id="best-title" class="best"></p>
   </div>
 </section>

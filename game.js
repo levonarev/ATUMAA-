@@ -1,23 +1,25 @@
-/* Atumaa — Wake the Grove. Plain canvas, no dependencies. */
+/* Atumaa — Scroll the Grove. One-thumb reel gestures, plain canvas, no dependencies. */
 (() => {
   'use strict';
 
+  // Each sign is answered with one of the gestures people already use on short-video feeds.
   const ELEMENTS = [
-    { name: 'Leaf', color: '#7ddc84', rgb: '125,220,132', note: 392.0 },
-    { name: 'Water', color: '#5fc9f3', rgb: '95,201,243', note: 440.0 },
-    { name: 'Sun', color: '#ffc857', rgb: '255,200,87', note: 523.25 },
-    { name: 'Moon', color: '#b9a0ff', rgb: '185,160,255', note: 587.33 },
+    { name: 'Leaf', rgb: '125,220,132', note: 392.0, gesture: 'up' },
+    { name: 'Water', rgb: '95,201,243', note: 440.0, gesture: 'down' },
+    { name: 'Sun', rgb: '255,200,87', note: 523.25, gesture: 'like' },
+    { name: 'Moon', rgb: '185,160,255', note: 587.33, gesture: 'hold' },
   ];
-  const TAIL_MAX = 4;
   const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
   const TAU = Math.PI * 2;
+  const SWIPE_PX = 34, TAP_PX = 12, TAP_MS = 300, DOUBLE_MS = 340, HOLD_S = 0.38;
+  const TOUCH = window.matchMedia && window.matchMedia('(hover: none)').matches;
 
   const $ = (id) => document.getElementById(id);
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   const ui = {
     hud: $('hud'), grove: $('grove'), pips: $('pips'), light: $('light'), score: $('score'),
-    hint: $('hint'), banner: $('banner'), release: $('btn-release'),
+    hint: $('hint'), banner: $('banner'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
     finalScore: $('final-score'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
@@ -26,13 +28,12 @@
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
   const roman = (n) => ROMAN[n - 1] || String(n);
 
   /* ---------- Layout ---------- */
   let W = 0, H = 0, U = 1, DPR = 1;
-  const field = { cx: 0, cy: 0, rx: 0, ry: 0, top: 60 };
-  let backdrop = null;
+  const field = { cx: 0, top: 64, heartY: 0, path: 0 };
+  let ground = null, forest = null;
 
   function resize() {
     W = window.innerWidth;
@@ -40,70 +41,74 @@
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
-    U = clamp(Math.min(W, H) / 620, 0.55, 1.5);
+    U = clamp(Math.min(W, H * 0.6) / 400, 0.7, 1.4);
     field.cx = W / 2;
-    // a stone and its floating request reach ~95 units above its base, so leave room under the HUD
-    const headroom = 98 * U, footroom = 34 * U;
-    field.ry = Math.max(80, (H - field.top - headroom - footroom) / 2);
-    field.cy = field.top + headroom + field.ry;
-    field.rx = Math.max(80, Math.min(W / 2 - 46 * U, field.ry * 1.6));
-    placeTotems();
+    field.heartY = H - Math.max(120, 132 * U);
+    field.path = Math.min(W * 0.33, 150 * U);
     buildBackdrop();
   }
 
   function buildBackdrop() {
-    backdrop = document.createElement('canvas');
-    backdrop.width = canvas.width;
-    backdrop.height = canvas.height;
-    const b = backdrop.getContext('2d');
+    // fixed ground with a lit path up the middle
+    ground = document.createElement('canvas');
+    ground.width = canvas.width;
+    ground.height = canvas.height;
+    const b = ground.getContext('2d');
     b.scale(DPR, DPR);
-    const g = b.createRadialGradient(field.cx, field.cy, 20, field.cx, field.cy, Math.max(W, H) * 0.75);
-    g.addColorStop(0, '#1d3a2a');
-    g.addColorStop(0.45, '#10241a');
-    g.addColorStop(1, '#050b08');
+    b.fillStyle = '#060d09';
+    b.fillRect(0, 0, W, H);
+    const g = b.createLinearGradient(field.cx - field.path * 1.9, 0, field.cx + field.path * 1.9, 0);
+    g.addColorStop(0, 'rgba(16,36,26,0)');
+    g.addColorStop(0.5, 'rgba(34,66,46,0.95)');
+    g.addColorStop(1, 'rgba(16,36,26,0)');
     b.fillStyle = g;
     b.fillRect(0, 0, W, H);
 
-    // moss speckles
-    for (let i = 0; i < 260; i++) {
-      b.fillStyle = `rgba(${Math.random() < 0.5 ? '125,220,132' : '200,230,170'},${rand(0.03, 0.11)})`;
-      b.beginPath();
-      b.arc(rand(0, W), rand(0, H), rand(0.6, 2.2) * U, 0, TAU);
-      b.fill();
-    }
+    // one screen-tall forest tile that wraps vertically, so it can scroll forever
+    forest = document.createElement('canvas');
+    forest.width = canvas.width;
+    forest.height = canvas.height;
+    const f = forest.getContext('2d');
+    f.scale(DPR, DPR);
+    const wrapped = (y, pad, fn) => { for (const o of [-H, 0, H]) if (y + o > -pad && y + o < H + pad) fn(y + o); };
 
-    // ritual rings on the ground
-    b.strokeStyle = 'rgba(190,230,190,0.07)';
-    b.lineWidth = 1.5;
-    for (const k of [1, 0.66, 0.33]) {
-      b.beginPath();
-      b.ellipse(field.cx, field.cy, field.rx * k, field.ry * k, 0, 0, TAU);
-      b.stroke();
+    for (let i = 0; i < Math.round((W * H) / 3200); i++) {
+      const x = rand(0, W), y = rand(0, H), r = rand(0.6, 2.1) * U;
+      f.fillStyle = `rgba(${Math.random() < 0.5 ? '125,220,132' : '200,230,170'},${rand(0.04, 0.13)})`;
+      wrapped(y, 4, (yy) => { f.beginPath(); f.arc(x, yy, r, 0, TAU); f.fill(); });
     }
-    b.setLineDash([3, 9]);
-    b.beginPath();
-    b.ellipse(field.cx, field.cy, field.rx * 0.83, field.ry * 0.83, 0, 0, TAU);
-    b.stroke();
-    b.setLineDash([]);
-
-    // tree silhouettes around the rim
-    const trees = Math.round((W + H) / 26);
+    // rune arcs across the path, like rungs you scroll past
+    f.strokeStyle = 'rgba(190,230,190,0.09)';
+    f.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      const y = (i + 0.5) * (H / 4);
+      wrapped(y, 40, (yy) => {
+        f.beginPath();
+        f.ellipse(field.cx, yy, field.path * 0.9, 16 * U, 0, Math.PI, TAU);
+        f.stroke();
+      });
+    }
+    // trees on both banks
+    const sideW = Math.max(30, field.cx - field.path);
+    const trees = Math.round((sideW * 2 * H) / 5200) + 10;
     for (let i = 0; i < trees; i++) {
-      const a = (i / trees) * TAU + rand(-0.03, 0.03);
-      const d = rand(1.12, 1.5);
-      const x = field.cx + Math.cos(a) * Math.max(field.rx * d, W * 0.5 * rand(0.92, 1.05));
-      const y = field.cy + Math.sin(a) * Math.max(field.ry * d, (H - field.top) * 0.5 * rand(0.92, 1.05));
-      const s = rand(26, 58) * U;
-      b.fillStyle = `rgba(${rand(3, 9) | 0},${rand(14, 26) | 0},${rand(10, 18) | 0},0.92)`;
-      for (let k = 0; k < 3; k++) {
-        const ww = s * (0.75 - k * 0.17), top = y - s * (0.55 + k * 0.42);
-        b.beginPath();
-        b.moveTo(x - ww, top + s * 0.62);
-        b.lineTo(x, top);
-        b.lineTo(x + ww, top + s * 0.62);
-        b.closePath();
-        b.fill();
-      }
+      const side = i % 2 ? 1 : -1;
+      const x = field.cx + side * (field.path + rand(0.05, 1) * sideW);
+      const y = rand(0, H);
+      const s = rand(26, 56) * U;
+      const col = `rgba(${rand(3, 9) | 0},${rand(15, 28) | 0},${rand(10, 19) | 0},0.94)`;
+      wrapped(y, s * 2, (yy) => {
+        f.fillStyle = col;
+        for (let k = 0; k < 3; k++) {
+          const ww = s * (0.75 - k * 0.17), top = yy - s * (0.55 + k * 0.42);
+          f.beginPath();
+          f.moveTo(x - ww, top + s * 0.62);
+          f.lineTo(x, top);
+          f.lineTo(x + ww, top + s * 0.62);
+          f.closePath();
+          f.fill();
+        }
+      });
     }
   }
 
@@ -129,94 +134,64 @@
     o.stop(t + dur + 0.03);
   }
   const sfx = {
-    pickup: (el) => tone(ELEMENTS[el].note, 0.18, 'sine', 0.09),
-    deliver: (el) => { tone(ELEMENTS[el].note * 2, 0.22, 'triangle', 0.09); },
-    wrong: () => tone(150, 0.12, 'square', 0.03),
-    drop: () => tone(300, 0.14, 'sine', 0.06, 0, 180),
-    awaken: () => [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.5, 'triangle', 0.08, i * 0.07)),
-    hit: () => { tone(120, 0.4, 'sawtooth', 0.09, 0, 50); tone(90, 0.3, 'square', 0.04, 0.03, 45); },
+    hit: (el, step) => {
+      const f = ELEMENTS[el].note * (1 + Math.min(step, 12) * 0.03);
+      if (el === 0) tone(f, 0.16, 'triangle', 0.09, 0, f * 1.6);
+      else if (el === 1) tone(f, 0.2, 'sine', 0.1, 0, f * 0.6);
+      else if (el === 2) { tone(f, 0.12, 'triangle', 0.08); tone(f * 1.5, 0.22, 'triangle', 0.08, 0.07); }
+      else tone(f * 0.5, 0.45, 'sine', 0.11);
+    },
+    swish: (up) => tone(up ? 220 : 330, 0.09, 'sine', 0.025, 0, up ? 420 : 170),
+    wrong: () => tone(140, 0.16, 'square', 0.04),
+    leak: () => { tone(120, 0.4, 'sawtooth', 0.09, 0, 50); tone(90, 0.3, 'square', 0.04, 0.03, 45); },
+    pass: () => tone(660, 0.25, 'sine', 0.05, 0, 880),
     dawn: () => [392, 523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.8, 'sine', 0.07, i * 0.11)),
     over: () => [392, 329.63, 261.63, 196].forEach((f, i) => tone(f, 0.7, 'triangle', 0.08, i * 0.22)),
   };
 
   /* ---------- State ---------- */
   let mode = 'title'; // title | play | pause | interlude | over
-  let time = 0, level = 1, score = 0, light = 1, combo = 0, lastAwaken = -99;
-  let awakened = 0, goal = 4, totalAwakened = 0, interlude = 0;
-  let spawnTimer = 0, wrongTimer = 0, deliverTimer = 0, shake = 0;
+  let time = 0, level = 1, score = 0, light = 1;
+  let combo = 0, bestCombo = 0, cleared = 0, goal = 14, totalCleared = 0, spawned = 0;
+  let spawnTimer = 0, interlude = 0, shake = 0, lastShade = false;
+  let scrollY = 0, scrollKick = 0, jolt = 0, heartPulse = 0;
   let best = 0;
   try { best = parseInt(localStorage.getItem('atumaa.best') || '0', 10) || 0; } catch (e) { /* storage blocked */ }
 
-  const wisp = { x: 0, y: 0, vx: 0, vy: 0, safe: 0 };
-  let tail = [];      // {el,x,y}; index 0 is nearest the wisp and is offered first
-  let motes = [];     // {el,x,y,vx,vy,age,life,noPick,ph}
-  let totems = [];    // {a,x,y,req,done,state,timer,wob,glow}
-  let shades = [];    // {x,y,vx,vy,out,ph,wa}
+  let targets = [];   // {shade,seq,done,y,ph,wob}; they fall toward the heart, lowest one is the front
+  let ghosts = [];    // answered signs flying off: {el,x,y,vx,vy,life,max,r}
   let particles = []; // {x,y,vx,vy,life,max,rgb,size}
   let rings = [];     // {x,y,r,max,life,rgb}
-  let texts = [];     // {x,y,text,life,rgb}
+  let texts = [];     // {x,y,text,life,rgb,size}
   let fireflies = [];
+  const learned = [0, 0, 0, 0];
+  let shadeLearned = 0;
 
-  const pointer = { x: 0, y: 0, active: false };
-  const keys = new Set();
+  // input
+  let ptr = null;     // {id,x0,y0,t0,done}
+  let dragY = 0, holding = false, holdT = 0, lastTap = 0, keyHold = false;
+  let lastWheelT = 0, lastWheelMag = 0;
 
-  function placeTotems() {
-    for (const t of totems) {
-      t.x = field.cx + Math.cos(t.a) * field.rx;
-      t.y = field.cy + Math.sin(t.a) * field.ry;
-    }
-  }
-
-  function elementCount() { return level < 3 ? 3 : 4; }
-
-  function newRequest() {
-    const lo = level < 3 ? 1 : 2;
-    const hi = Math.min(TAIL_MAX, 2 + Math.floor(level / 2));
-    const n = totalAwakened < 2 ? 1 : (lo + Math.floor(Math.random() * (hi - lo + 1)));
-    const req = [];
-    for (let i = 0; i < n; i++) req.push((Math.random() * elementCount()) | 0);
-    return req;
-  }
+  function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (level - 1))) * H; }
+  function spawnGap() { return Math.max(0.44, 1.18 - 0.075 * level) * rand(0.82, 1.2); }
+  function multiplier() { return Math.min(6, 1 + Math.floor(combo / 8)); }
+  function targetX(t) { return field.cx + Math.sin(t.ph + t.y * 0.008) * field.path * 0.42; }
 
   function setupLevel(n) {
     level = n;
-    awakened = 0;
-    goal = 3 + level;
-    const count = Math.min(3 + Math.floor((level - 1) / 2), 6);
-    const offset = -Math.PI / 2 + (level % 2 ? 0 : Math.PI / count);
-    totems = [];
-    for (let i = 0; i < count; i++) {
-      totems.push({ a: offset + (i / count) * TAU, x: 0, y: 0, req: newRequest(), done: 0, state: 'asking', timer: 0, wob: 0, glow: 0 });
-    }
-    placeTotems();
-    const shadeCount = Math.min(1 + Math.floor(level / 2), 6);
-    shades = [];
-    for (let i = 0; i < shadeCount; i++) shades.push(spawnShade({ out: 2 + i * 1.5 }));
+    cleared = 0;
+    goal = 10 + 4 * level;
+    spawnTimer = 0.5;
     ui.grove.textContent = 'Grove ' + roman(level);
-    ui.pips.innerHTML = '';
-    for (let i = 0; i < goal; i++) ui.pips.appendChild(document.createElement('i'));
-  }
-
-  function spawnShade(s) {
-    // enters from the rim, on the side away from the wisp
-    const away = Math.atan2(field.cy - wisp.y, field.cx - wisp.x) + rand(-1, 1);
-    s.x = field.cx + Math.cos(away) * (field.rx + 60 * U);
-    s.y = field.cy + Math.sin(away) * (field.ry + 60 * U);
-    s.vx = 0; s.vy = 0;
-    s.ph = rand(0, TAU);
-    s.wa = rand(0, TAU);
-    if (s.out == null) s.out = 0;
-    return s;
   }
 
   function startGame() {
     initAudio();
-    score = 0; light = 1; combo = 0; lastAwaken = -99; totalAwakened = 0;
-    tail = []; motes = []; particles = []; rings = []; texts = [];
-    wisp.x = field.cx; wisp.y = field.cy; wisp.vx = wisp.vy = 0; wisp.safe = 1;
-    pointer.active = false;
+    score = 0; light = 1; combo = 0; bestCombo = 0; totalCleared = 0; spawned = 0;
+    targets = []; ghosts = []; particles = []; rings = []; texts = [];
+    learned.fill(0); shadeLearned = 0; lastShade = false;
+    ptr = null; dragY = 0; holding = false; keyHold = false;
     setupLevel(1);
-    for (let i = 0; i < 5; i++) spawnMote();
     setMode('play');
   }
 
@@ -227,36 +202,28 @@
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
     ui.hud.hidden = m === 'title';
-    ui.release.hidden = !playing;
     if (!playing) ui.hint.hidden = true;
-    canvas.style.cursor = playing ? 'none' : 'default';
   }
 
   /* ---------- Spawning ---------- */
-  function neededElements() {
-    // signs the stones still want that are not already in the trail or on the field
-    const want = [];
-    for (const t of totems) if (t.state === 'asking') for (let i = t.done; i < t.req.length; i++) want.push(t.req[i]);
-    const have = tail.map((n) => n.el).concat(motes.map((m) => m.el));
-    for (const el of have) {
-      const i = want.indexOf(el);
-      if (i >= 0) want.splice(i, 1);
+  function spawnTarget() {
+    spawned++;
+    const t = { shade: false, seq: [], done: 0, y: field.top - 40 * U, ph: rand(0, TAU), wob: 0 };
+    const signs = level >= 4 ? 4 : level >= 2 ? 3 : spawned > 4 ? 2 : 1;
+    if (level >= 3 && !lastShade && Math.random() < Math.min(0.24, 0.12 + 0.02 * level)) {
+      t.shade = true;
+    } else {
+      let len = 1;
+      if (level >= 5 && Math.random() < Math.min(0.5, 0.2 + 0.06 * (level - 5))) len = level >= 7 && Math.random() < 0.4 ? 3 : 2;
+      for (let i = 0; i < len; i++) t.seq.push((Math.random() * signs) | 0);
+      // show a sign the first time it becomes available so the player meets it early
+      if (len === 1) {
+        if (level === 2 && cleared === 0) t.seq[0] = 2;
+        if (level === 4 && cleared === 0) t.seq[0] = 3;
+      }
     }
-    return want;
-  }
-
-  function spawnMote() {
-    const need = neededElements();
-    const el = need.length && Math.random() < 0.75 ? pick(need) : (Math.random() * elementCount()) | 0;
-    let x = 0, y = 0;
-    for (let tries = 0; tries < 12; tries++) {
-      const a = rand(0, TAU), r = Math.sqrt(Math.random()) * 0.78;
-      x = field.cx + Math.cos(a) * field.rx * r;
-      y = field.cy + Math.sin(a) * field.ry * r;
-      if (Math.hypot(x - wisp.x, y - wisp.y) > 90 * U) break;
-    }
-    const d = rand(0, TAU), sp = rand(5, 14) * U;
-    motes.push({ el, x, y, vx: Math.cos(d) * sp, vy: Math.sin(d) * sp, age: 0, life: rand(15, 22), noPick: 0, ph: rand(0, TAU) });
+    lastShade = t.shade;
+    targets.push(t);
   }
 
   function burst(x, y, rgb, n, speed) {
@@ -267,76 +234,100 @@
     }
   }
 
-  /* ---------- Actions ---------- */
-  function releaseFront() {
-    if (mode !== 'play' || !tail.length) return;
-    const n = tail.shift();
-    const sp = Math.hypot(wisp.vx, wisp.vy);
-    // toss it behind the direction of travel so it is easy to circle back for
-    const a = sp > 20 ? Math.atan2(-wisp.vy, -wisp.vx) + rand(-0.5, 0.5) : rand(0, TAU);
-    motes.push({ el: n.el, x: wisp.x, y: wisp.y, vx: Math.cos(a) * 130 * U, vy: Math.sin(a) * 130 * U, age: 1, life: 16, noPick: 0.7, ph: rand(0, TAU) });
-    sfx.drop();
+  function front() {
+    let f = null;
+    for (const t of targets) if (t.y > field.top + 6 && (!f || t.y > f.y)) f = t;
+    return f;
   }
 
-  function awaken(t) {
-    const len = t.req.length;
-    combo = time - lastAwaken < 7 ? Math.min(combo + 1, 9) : 1;
-    lastAwaken = time;
-    const gain = 100 * len * combo;
-    score += gain;
-    light = Math.min(1, light + 0.14 + 0.05 * len);
-    t.state = 'awake';
-    t.timer = 2.6;
-    awakened++;
-    totalAwakened++;
-    const reach = 165 * U;
-    rings.push({ x: t.x, y: t.y - 24 * U, r: 10, max: reach, life: 0.7, rgb: '255,220,140' });
-    burst(t.x, t.y - 30 * U, '255,220,140', 34, 260);
-    texts.push({ x: t.x, y: t.y - 96 * U, text: '+' + gain + (combo > 1 ? '  ×' + combo : ''), life: 1.3, rgb: '255,243,196' });
-    for (const s of shades) {
-      if (s.out <= 0 && Math.hypot(s.x - t.x, s.y - t.y) < reach) {
-        burst(s.x, s.y, '150,110,210', 18, 180);
-        s.out = 4;
-        score += 50;
-      }
+  /* ---------- Gestures ---------- */
+  function gesture(g) {
+    if (mode !== 'play') return;
+    // the whole grove scrolls with the thumb, like a feed
+    if (g === 'up') { scrollKick = 1500 * U; jolt = -22 * U; sfx.swish(true); }
+    else if (g === 'down') { scrollKick = -1100 * U; jolt = 22 * U; sfx.swish(false); }
+    const t = front();
+    if (!t) return;
+    if (t.shade) {
+      if (g === 'hold') return;
+      t.wob = 0.35;
+      penalty(0.12, 'It feeds on your touch', targetX(t), t.y);
+      return;
     }
-    sfx.awaken();
-    const pip = ui.pips.children[awakened - 1];
-    if (pip) pip.className = 'on';
-    if (awakened >= goal) startInterlude();
+    const el = t.seq[t.done];
+    if (ELEMENTS[el].gesture === g) answer(t, el);
+    else if (g !== 'hold') {
+      t.wob = 0.35;
+      penalty(0.07, 'Wrong sign', targetX(t), t.y);
+    }
+  }
+
+  function answer(t, el) {
+    const x = targetX(t), y = t.y;
+    const near = clamp((y - field.top) / (field.heartY - field.top), 0, 1);
+    combo++;
+    bestCombo = Math.max(bestCombo, combo);
+    const pts = Math.round((10 + 20 * near) * multiplier());
+    score += pts;
+    light = Math.min(1, light + (el === 1 ? 0.03 : 0.012));
+    learned[el]++;
+    sfx.hit(el, combo);
+    const rgb = ELEMENTS[el].rgb, r = 27 * U;
+    if (el === 0) ghosts.push({ el, x, y, vx: rand(-60, 60) * U, vy: -1500 * U, life: 0.5, max: 0.5, r });
+    else if (el === 1) {
+      const d = Math.max(60, field.heartY - y);
+      ghosts.push({ el, x, y, vx: ((field.cx - x) / d) * 1300 * U, vy: 1300 * U, life: Math.min(0.5, d / (1300 * U)), max: 0.5, r });
+      heartPulse = 1;
+    } else if (el === 2) {
+      rings.push({ x, y, r: r, max: r * 3.4, life: 0.5, rgb });
+      rings.push({ x, y, r: r * 0.5, max: r * 2.3, life: 0.4, rgb: '255,243,196' });
+      burst(x, y, rgb, 22, 300);
+    } else {
+      rings.push({ x, y, r: r * 2.6, max: r * 0.3, life: 0.45, rgb });
+      burst(x, y, rgb, 14, 90);
+    }
+    burst(x, y, rgb, 8, 160);
+    texts.push({ x: x + 46 * U, y: y - 8 * U, text: '+' + pts, life: 0.9, rgb: '255,243,196', size: 18 });
+    if (combo > 0 && combo % 8 === 0 && multiplier() <= 6) {
+      texts.push({ x: field.cx, y: H * 0.42, text: 'Streak ' + combo + '  ×' + multiplier(), life: 1.3, rgb, size: 26 });
+    }
+    t.done++;
+    if (t.done >= t.seq.length) {
+      targets.splice(targets.indexOf(t), 1);
+      clearedOne();
+    } else {
+      t.wob = 0;
+    }
+  }
+
+  function clearedOne() {
+    cleared++;
+    totalCleared++;
+    if (cleared >= goal) startInterlude();
+  }
+
+  function penalty(amount, label, x, y) {
+    light -= amount;
+    combo = 0;
+    shake = 0.2;
+    texts.push({ x, y: y - 44 * U, text: label, life: 1, rgb: '255,150,140', size: 17 });
+    sfx.wrong();
   }
 
   function startInterlude() {
     mode = 'interlude';
-    interlude = 2.4;
-    light = Math.min(1, light + 0.35);
-    score += 250 * level;
-    for (const s of shades) {
-      if (s.out <= 0) burst(s.x, s.y, '150,110,210', 16, 180);
-      s.out = 99;
-    }
-    rings.push({ x: field.cx, y: field.cy, r: 20, max: Math.max(W, H), life: 1.6, rgb: '255,230,160' });
-    ui.banner.innerHTML = 'Dawn breaks<small>Grove ' + roman(level) + ' restored · +' + 250 * level + '</small>';
+    interlude = 2.3;
+    const bonus = 200 * level;
+    light = Math.min(1, light + 0.25);
+    score += bonus;
+    for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
+    targets = [];
+    rings.push({ x: field.cx, y: field.heartY, r: 20, max: Math.max(W, H) * 1.1, life: 1.6, rgb: '255,230,160' });
+    scrollKick = 2600 * U;
+    ui.banner.innerHTML = 'Dawn breaks<small>Grove ' + roman(level) + ' restored · +' + bonus + '</small>';
     ui.banner.hidden = false;
     ui.hint.hidden = true;
     sfx.dawn();
-  }
-
-  function hitByShade(s) {
-    light -= 0.2;
-    combo = 0;
-    wisp.safe = 1.6;
-    shake = 0.35;
-    for (const n of tail) {
-      const a = rand(0, TAU);
-      motes.push({ el: n.el, x: n.x, y: n.y, vx: Math.cos(a) * 170 * U, vy: Math.sin(a) * 170 * U, age: 1, life: 12, noPick: 0.9, ph: rand(0, TAU) });
-    }
-    tail = [];
-    burst(wisp.x, wisp.y, '190,150,255', 26, 240);
-    const a = Math.atan2(s.y - wisp.y, s.x - wisp.x);
-    s.vx = Math.cos(a) * 260 * U;
-    s.vy = Math.sin(a) * 260 * U;
-    sfx.hit();
   }
 
   function gameOver() {
@@ -347,7 +338,7 @@
       try { localStorage.setItem('atumaa.best', String(best)); } catch (e) { /* storage blocked */ }
     }
     ui.finalScore.textContent = score.toLocaleString();
-    ui.finalDetail.textContent = 'Reached Grove ' + roman(level) + ' · ' + totalAwakened + ' stone' + (totalAwakened === 1 ? '' : 's') + ' woken';
+    ui.finalDetail.textContent = 'Reached Grove ' + roman(level) + ' · ' + totalCleared + ' answered · best streak ' + bestCombo;
     ui.bestOver.textContent = isBest && score > 0 ? 'New best!' : 'Best ' + best.toLocaleString();
     sfx.over();
   }
@@ -356,145 +347,61 @@
   function update(dt) {
     time += dt;
     const playing = mode === 'play';
+    const speed = fallSpeed();
 
-    // wisp steering
-    let dx = 0, dy = 0;
-    if (keys.has('left')) dx -= 1;
-    if (keys.has('right')) dx += 1;
-    if (keys.has('up')) dy -= 1;
-    if (keys.has('down')) dy += 1;
-    const maxSp = 340 * U;
-    let tx = 0, ty = 0;
-    if (dx || dy) {
-      const l = Math.hypot(dx, dy);
-      tx = (dx / l) * maxSp; ty = (dy / l) * maxSp;
-      pointer.active = false;
-    } else if (pointer.active) {
-      const px = pointer.x - wisp.x, py = pointer.y - wisp.y;
-      const d = Math.hypot(px, py);
-      if (d > 1) {
-        const sp = Math.min(maxSp, d * 9);
-        tx = (px / d) * sp; ty = (py / d) * sp;
+    // press-and-hold fills a ring, then fires
+    if (holding && playing) {
+      holdT += dt / HOLD_S;
+      if (holdT >= 1) {
+        holding = false;
+        holdT = 0;
+        if (ptr) ptr.done = true;
+        gesture('hold');
       }
-    }
-    const k = Math.min(1, dt * 11);
-    wisp.vx += (tx - wisp.vx) * k;
-    wisp.vy += (ty - wisp.vy) * k;
-    wisp.x = clamp(wisp.x + wisp.vx * dt, 12 * U, W - 12 * U);
-    wisp.y = clamp(wisp.y + wisp.vy * dt, field.top + 4, H - 12 * U);
-    wisp.safe = Math.max(0, wisp.safe - dt);
+    } else if (!holding) holdT = 0;
 
-    // trail follows like a chain
-    let px = wisp.x, py = wisp.y;
-    const gap = 21 * U;
-    for (const n of tail) {
-      const ddx = n.x - px, ddy = n.y - py;
-      const d = Math.hypot(ddx, ddy) || 1;
-      if (d > gap) { n.x = px + (ddx / d) * gap; n.y = py + (ddy / d) * gap; }
-      px = n.x; py = n.y;
-    }
-
-    // motes
-    for (let i = motes.length - 1; i >= 0; i--) {
-      const m = motes[i];
-      m.age += dt;
-      m.noPick = Math.max(0, m.noPick - dt);
-      const sp = Math.hypot(m.vx, m.vy);
-      if (sp > 16 * U) { const f = Math.pow(0.04, dt); m.vx *= f; m.vy *= f; }
-      m.x += m.vx * dt; m.y += m.vy * dt;
-      // keep inside the grove
-      const ex = (m.x - field.cx) / (field.rx * 0.92), ey = (m.y - field.cy) / (field.ry * 0.92);
-      if (ex * ex + ey * ey > 1) {
-        m.vx += (field.cx - m.x) * dt * 1.5;
-        m.vy += (field.cy - m.y) * dt * 1.5;
-      }
-      if (m.age > m.life) { motes.splice(i, 1); continue; }
-      if (playing && !m.noPick && tail.length < TAIL_MAX && Math.hypot(m.x - wisp.x, m.y - wisp.y) < 22 * U) {
-        tail.push({ el: m.el, x: m.x, y: m.y });
-        burst(m.x, m.y, ELEMENTS[m.el].rgb, 8, 120);
-        sfx.pickup(m.el);
-        motes.splice(i, 1);
-      }
-    }
     if (playing) {
       spawnTimer -= dt;
-      const want = Math.min(10, 4 + totems.length);
-      if (spawnTimer <= 0 && motes.length < want) {
-        spawnMote();
-        spawnTimer = motes.length < 3 ? 0.25 : 0.8;
+      if (spawnTimer <= 0 && cleared + targets.length < goal) {
+        spawnTarget();
+        spawnTimer = spawnGap();
       }
     }
 
-    // stones
-    wrongTimer = Math.max(0, wrongTimer - dt);
-    deliverTimer = Math.max(0, deliverTimer - dt);
-    for (const t of totems) {
+    for (let i = targets.length - 1; i >= 0; i--) {
+      const t = targets[i];
+      t.y += speed * dt;
+      t.ph += dt * (t.shade ? 3 : 0);
       t.wob = Math.max(0, t.wob - dt);
-      if (t.state === 'awake') {
-        t.glow = Math.min(1, t.glow + dt * 4);
-        t.timer -= dt;
-        if (t.timer <= 0 && mode === 'play') { t.state = 'asking'; t.req = newRequest(); t.done = 0; }
-        continue;
-      }
-      t.glow = Math.max(0, t.glow - dt * 1.5);
-      if (!playing || !tail.length) continue;
-      if (Math.hypot(wisp.x - t.x, wisp.y - (t.y - 22 * U)) < 44 * U) {
-        const front = tail[0];
-        if (front.el === t.req[t.done]) {
-          if (deliverTimer > 0) continue;
-          tail.shift();
-          t.done++;
-          deliverTimer = 0.14;
-          score += 10 * Math.max(1, combo);
-          light = Math.min(1, light + 0.02);
-          burst(t.x, t.y - 60 * U, ELEMENTS[front.el].rgb, 12, 150);
-          sfx.deliver(front.el);
-          if (t.done >= t.req.length) awaken(t);
-          if (mode !== 'play') break;
-        } else if (wrongTimer <= 0) {
-          t.wob = 0.35;
-          wrongTimer = 0.7;
-          sfx.wrong();
+      if (playing && t.y >= field.heartY - 30 * U) {
+        targets.splice(i, 1);
+        if (t.shade) {
+          // resisting the urge to touch is the right answer
+          combo++;
+          bestCombo = Math.max(bestCombo, combo);
+          shadeLearned++;
+          const pts = 25 * multiplier();
+          score += pts;
+          burst(field.cx, field.heartY, '150,110,210', 16, 200);
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Let go  +' + pts, life: 1, rgb: '200,180,255', size: 18 });
+          sfx.pass();
+          clearedOne();
+        } else {
+          light -= 0.2;
+          combo = 0;
+          shake = 0.35;
+          heartPulse = 1;
+          burst(field.cx, field.heartY, '255,120,110', 24, 260);
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Missed', life: 1, rgb: '255,150,140', size: 18 });
+          sfx.leak();
+          clearedOne();
         }
+        if (mode !== 'play') break;
       }
     }
 
-    // shades
-    const shadeSp = Math.min(118, 40 + 8 * level) * U;
-    for (const s of shades) {
-      if (s.out > 0) {
-        if (mode === 'play') { s.out -= dt; if (s.out <= 0) spawnShade(s); }
-        continue;
-      }
-      s.ph += dt * 3;
-      s.wa += rand(-1, 1) * dt * 2.5;
-      let ax = Math.cos(s.wa) * 0.55, ay = Math.sin(s.wa) * 0.55;
-      if (wisp.safe <= 0) {
-        const d = Math.hypot(wisp.x - s.x, wisp.y - s.y) || 1;
-        ax += (wisp.x - s.x) / d; ay += (wisp.y - s.y) / d;
-      } else {
-        ax += (field.cx - s.x) / (field.rx * 2); ay += (field.cy - s.y) / (field.ry * 2);
-      }
-      // shades keep apart from each other
-      for (const o of shades) {
-        if (o === s || o.out > 0) continue;
-        const d = Math.hypot(s.x - o.x, s.y - o.y);
-        if (d > 0 && d < 70 * U) { ax += ((s.x - o.x) / d) * 0.9; ay += ((s.y - o.y) / d) * 0.9; }
-      }
-      const al = Math.hypot(ax, ay) || 1;
-      const kk = Math.min(1, dt * 1.8);
-      s.vx += ((ax / al) * shadeSp - s.vx) * kk;
-      s.vy += ((ay / al) * shadeSp - s.vy) * kk;
-      s.x += s.vx * dt; s.y += s.vy * dt;
-      if (playing && wisp.safe <= 0 && Math.hypot(wisp.x - s.x, wisp.y - s.y) < 25 * U) hitByShade(s);
-    }
-
-    // light and progression
-    if (playing) {
-      light -= (0.024 + 0.003 * level) * dt;
-      if (time - lastAwaken > 7) combo = 0;
-      if (light <= 0) { light = 0; gameOver(); }
-    } else if (mode === 'interlude') {
+    if (playing && light <= 0) { light = 0; gameOver(); }
+    if (mode === 'interlude') {
       interlude -= dt;
       if (interlude <= 0) {
         ui.banner.hidden = true;
@@ -503,7 +410,23 @@
       }
     }
 
-    // effects
+    // feed motion: steady drift plus the kick from each swipe
+    scrollY += (speed * 0.55 + scrollKick) * dt;
+    scrollKick *= Math.pow(0.004, dt);
+    jolt *= Math.pow(0.0006, dt);
+    heartPulse = Math.max(0, heartPulse - dt * 2.5);
+    shake = Math.max(0, shake - dt);
+
+    for (let i = ghosts.length - 1; i >= 0; i--) {
+      const g = ghosts[i];
+      g.life -= dt;
+      g.x += g.vx * dt; g.y += g.vy * dt;
+      if (Math.random() < dt * 60) particles.push({ x: g.x, y: g.y, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.4, max: 0.4, rgb: ELEMENTS[g.el].rgb, size: rand(1.5, 3.5) * U });
+      if (g.life <= 0) {
+        if (g.el === 1) burst(field.cx, field.heartY, ELEMENTS[1].rgb, 12, 160);
+        ghosts.splice(i, 1);
+      }
+    }
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.life -= dt;
@@ -514,35 +437,34 @@
     for (let i = rings.length - 1; i >= 0; i--) {
       const r = rings[i];
       r.life -= dt;
-      r.r += (r.max - r.r) * Math.min(1, dt * 5);
+      r.r += (r.max - r.r) * Math.min(1, dt * 6);
       if (r.life <= 0) rings.splice(i, 1);
     }
     for (let i = texts.length - 1; i >= 0; i--) {
       texts[i].life -= dt;
-      texts[i].y -= 26 * U * dt;
+      texts[i].y -= 30 * U * dt;
       if (texts[i].life <= 0) texts.splice(i, 1);
-    }
-    shake = Math.max(0, shake - dt);
-    if (Math.random() < dt * 14 && (Math.abs(wisp.vx) + Math.abs(wisp.vy)) > 40) {
-      particles.push({ x: wisp.x + rand(-4, 4), y: wisp.y + rand(-4, 4), vx: rand(-12, 12), vy: rand(-12, 12), life: 0.6, max: 0.6, rgb: '255,243,196', size: rand(1, 2.4) * U });
     }
   }
 
   /* ---------- HUD ---------- */
-  let lastHint = '';
+  const HINTS = TOUCH
+    ? ['Swipe up to send the Leaf onward', 'Swipe down to draw the Water in', 'Double-tap to kindle the Sun', 'Press and hold to still the Moon']
+    : ['Swipe up, scroll, or press ↑ for Leaf', 'Swipe down, scroll back, or press ↓ for Water', 'Double-click or press Space for Sun', 'Hold the mouse button or Shift for Moon'];
+  let lastHint = '', lastPips = '';
   function updateHud() {
     ui.score.textContent = score.toLocaleString();
     ui.light.style.width = (light * 100).toFixed(1) + '%';
     ui.light.classList.toggle('low', light < 0.25 && mode === 'play');
+    const pips = cleared + ' / ' + goal;
+    if (pips !== lastPips) { lastPips = pips; ui.pips.textContent = pips; }
     let hint = '';
-    if (mode === 'play' && level === 1) {
-      if (!tail.length) hint = 'Drift into a glowing mote to gather it';
-      else {
-        const front = tail[0].el;
-        const wanted = totems.some((t) => t.state === 'asking' && t.req[t.done] === front);
-        hint = wanted
-          ? 'Carry your ' + ELEMENTS[front].name + ' mote to the stone asking for that sign'
-          : 'No stone wants ' + ELEMENTS[front].name + ' next. Release it to reach the mote behind';
+    if (mode === 'play') {
+      const t = front();
+      if (t) {
+        if (t.shade) { if (shadeLearned < 2) hint = 'A shade. Do not touch. Let it scroll past'; }
+        else if (learned[t.seq[t.done]] < 3) hint = HINTS[t.seq[t.done]];
+        if (!hint && !t.shade && t.seq.length > 1 && level < 7) hint = 'Bound signs: answer each one in turn';
       }
     }
     if (hint !== lastHint) {
@@ -577,23 +499,13 @@
     }
   }
 
-  function drawIcon(el, x, y, r, filled, alpha) {
-    const e = ELEMENTS[el];
+  function drawIcon(el, x, y, r, alpha) {
     ctx.save();
     ctx.translate(x, y);
     if (el === 0) ctx.rotate(0.6);
     iconPath(el, r);
-    if (filled) {
-      ctx.fillStyle = `rgba(${e.rgb},${alpha})`;
-      ctx.fill();
-    } else {
-      ctx.fillStyle = `rgba(${e.rgb},${alpha * 0.16})`;
-      ctx.fill();
-      ctx.strokeStyle = `rgba(${e.rgb},${alpha})`;
-      ctx.lineWidth = 1.6 * U;
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    }
+    ctx.fillStyle = `rgba(${ELEMENTS[el].rgb},${alpha})`;
+    ctx.fill();
     ctx.restore();
   }
 
@@ -608,179 +520,202 @@
   }
 
   function drawOrb(el, x, y, r, alpha) {
-    const e = ELEMENTS[el];
-    glow(x, y, r * 2.6, e.rgb, 0.38 * alpha);
-    ctx.fillStyle = `rgba(8,20,14,${0.85 * alpha})`;
+    const rgb = ELEMENTS[el].rgb;
+    glow(x, y, r * 2.4, rgb, 0.36 * alpha);
+    ctx.fillStyle = `rgba(8,20,14,${0.88 * alpha})`;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = `rgba(${e.rgb},${alpha})`;
-    ctx.lineWidth = 1.5 * U;
+    ctx.strokeStyle = `rgba(${rgb},${alpha})`;
+    ctx.lineWidth = 2 * U;
     ctx.stroke();
-    drawIcon(el, x, y, r * 0.62, true, alpha);
+    drawIcon(el, x, y, r * 0.6, alpha);
   }
 
-  function drawTotem(t) {
-    const awake = t.glow;
-    const wob = t.wob > 0 ? Math.sin(t.wob * 60) * 3 * U * (t.wob / 0.35) : 0;
-    const x = t.x + wob, y = t.y;
-    const hw = 16 * U, hh = 52 * U;
-
-    // shadow and aura
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.beginPath();
-    ctx.ellipse(x, y + 2 * U, hw * 1.5, hw * 0.5, 0, 0, TAU);
-    ctx.fill();
-    if (awake > 0) glow(x, y - hh * 0.5, 80 * U, '255,210,120', 0.45 * awake);
-
-    // the stone
-    ctx.beginPath();
-    ctx.moveTo(x - hw, y);
-    ctx.lineTo(x - hw * 0.78, y - hh * 0.8);
-    ctx.quadraticCurveTo(x - hw * 0.5, y - hh * 1.04, x, y - hh);
-    ctx.quadraticCurveTo(x + hw * 0.6, y - hh * 0.98, x + hw * 0.82, y - hh * 0.75);
-    ctx.lineTo(x + hw, y);
-    ctx.closePath();
-    const g = ctx.createLinearGradient(x - hw, 0, x + hw, 0);
-    g.addColorStop(0, awake > 0.5 ? '#8f8a6a' : '#566a5e');
-    g.addColorStop(1, awake > 0.5 ? '#4f4a36' : '#26342c');
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,220,150,${0.18 + awake * 0.7})`;
-    ctx.lineWidth = 1.5 * U;
-    ctx.stroke();
-
-    // carved spiral
-    ctx.strokeStyle = awake > 0 ? `rgba(255,236,170,${0.35 + awake * 0.65})` : 'rgba(190,230,190,0.28)';
-    ctx.lineWidth = 1.6 * U;
-    ctx.beginPath();
-    for (let i = 0; i <= 26; i++) {
-      const a = i * 0.42, rr = (1 + i * 0.26) * U;
-      const sx = x + Math.cos(a) * rr, sy = y - hh * 0.52 + Math.sin(a) * rr;
-      if (i) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy);
-    }
-    ctx.stroke();
-
-    // the request, floating above
-    if (t.state === 'asking') {
-      const n = t.req.length, r = 9.5 * U, step = 25 * U;
-      const y0 = y - hh - 24 * U;
-      const x0 = x - ((n - 1) * step) / 2;
-      ctx.fillStyle = 'rgba(4,10,7,0.62)';
+  function chevrons(x, y, dir, rgb, alpha) {
+    // dir -1 points up, +1 points down
+    ctx.lineWidth = 3 * U;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < 2; i++) {
+      const k = (time * 1.6 + i * 0.5) % 1;
+      const yy = y + dir * (i * 11 + k * 8) * U;
+      ctx.strokeStyle = `rgba(${rgb},${alpha * (1 - k * 0.7)})`;
       ctx.beginPath();
-      ctx.roundRect(x0 - 16 * U, y0 - 15 * U, (n - 1) * step + 32 * U, 30 * U, 15 * U);
-      ctx.fill();
-      for (let i = 0; i < n; i++) {
-        const xi = x0 + i * step;
-        if (i < t.done) {
-          drawIcon(t.req[i], xi, y0, r, true, 0.3);
-        } else if (i === t.done) {
-          const p = 1 + Math.sin(time * 6) * 0.12;
-          glow(xi, y0, r * 2.4, ELEMENTS[t.req[i]].rgb, 0.4);
-          drawIcon(t.req[i], xi, y0, r * p, true, 1);
-        } else {
-          drawIcon(t.req[i], xi, y0, r * 0.85, false, 0.8);
-        }
+      ctx.moveTo(x - 10 * U, yy - dir * 7 * U);
+      ctx.lineTo(x, yy);
+      ctx.lineTo(x + 10 * U, yy - dir * 7 * U);
+      ctx.stroke();
+    }
+  }
+
+  // the cue around a sign shows which thumb gesture answers it
+  function drawCue(el, x, y, r, strong) {
+    const rgb = ELEMENTS[el].rgb, a = strong ? 1 : 0.45;
+    if (el === 0) chevrons(x, y - r - 12 * U, -1, rgb, a);
+    else if (el === 1) chevrons(x, y + r + 12 * U, 1, rgb, a);
+    else if (el === 2) {
+      ctx.lineWidth = 2 * U;
+      for (let i = 0; i < 2; i++) {
+        const k = (time * 1.4 + i * 0.28) % 1;
+        ctx.strokeStyle = `rgba(${rgb},${a * (1 - k)})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r + (5 + k * 16) * U, 0, TAU);
+        ctx.stroke();
+      }
+    } else {
+      ctx.lineWidth = 3 * U;
+      ctx.setLineDash([5 * U, 7 * U]);
+      ctx.strokeStyle = `rgba(${rgb},${a * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 9 * U, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (strong && holdT > 0) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 4 * U;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 9 * U, -Math.PI / 2, -Math.PI / 2 + holdT * TAU);
+        ctx.stroke();
       }
     }
   }
 
-  function drawShade(s) {
-    const r = 17 * U;
-    glow(s.x, s.y, r * 3, '60,20,90', 0.5);
+  function drawShade(x, y, ph, isFront) {
+    const r = 27 * U;
+    glow(x, y, r * 2.6, '70,25,105', 0.55);
     ctx.fillStyle = '#0b0612';
-    ctx.strokeStyle = 'rgba(160,110,230,0.75)';
-    ctx.lineWidth = 1.5 * U;
+    ctx.strokeStyle = 'rgba(160,110,230,0.8)';
+    ctx.lineWidth = 2 * U;
     ctx.beginPath();
-    for (let i = 0; i <= 18; i++) {
-      const a = (i / 18) * TAU;
-      const rr = r * (1 + Math.sin(a * 5 + s.ph) * 0.14 + Math.sin(a * 3 - s.ph * 1.3) * 0.1);
-      const px = s.x + Math.cos(a) * rr, py = s.y + Math.sin(a) * rr;
-      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    for (let i = 0; i <= 20; i++) {
+      const a = (i / 20) * TAU;
+      const rr = r * (1 + Math.sin(a * 5 + ph) * 0.13 + Math.sin(a * 3 - ph * 1.3) * 0.1);
+      if (i) ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
     }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    // eyes look where it is heading
-    const d = Math.hypot(s.vx, s.vy) || 1;
-    const ex = (s.vx / d) * 4 * U, ey = (s.vy / d) * 4 * U;
     ctx.fillStyle = '#e9d8ff';
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.ellipse(s.x + ex + side * 5.5 * U, s.y + ey - 2 * U, 2.6 * U, 3.6 * U, 0, 0, TAU);
+      ctx.ellipse(x + side * 9 * U, y + 3 * U, 4 * U, 5.5 * U, 0, 0, TAU);
       ctx.fill();
     }
+    if (isFront) {
+      // a barred ring: hands off
+      ctx.strokeStyle = 'rgba(255,150,140,0.75)';
+      ctx.lineWidth = 2.5 * U;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 12 * U, 0, TAU);
+      ctx.moveTo(x - (r + 12 * U) * 0.7, y - (r + 12 * U) * 0.7);
+      ctx.lineTo(x + (r + 12 * U) * 0.7, y + (r + 12 * U) * 0.7);
+      ctx.stroke();
+    }
+  }
+
+  function drawTarget(t, isFront) {
+    const wob = t.wob > 0 ? Math.sin(t.wob * 60) * 6 * U * (t.wob / 0.35) : 0;
+    const fadeIn = clamp((t.y - (field.top - 40 * U)) / (70 * U), 0, 1);
+    // the front one follows the thumb a little while dragging, like a reel being pulled
+    const drag = isFront && !t.shade ? clamp(dragY, -SWIPE_PX, SWIPE_PX) * 0.7 : 0;
+    const x = targetX(t) + wob, y = t.y + jolt + drag;
+    ctx.globalAlpha = fadeIn;
+    if (t.shade) {
+      drawShade(x, y, t.ph, isFront);
+    } else {
+      const r = 27 * U;
+      // bound signs trail above the current one, waiting their turn
+      for (let i = t.seq.length - 1; i > t.done; i--) {
+        const k = i - t.done;
+        ctx.strokeStyle = 'rgba(255,243,196,0.25)';
+        ctx.lineWidth = 2 * U;
+        ctx.beginPath();
+        ctx.moveTo(x, y - (k - 1) * 46 * U);
+        ctx.lineTo(x, y - k * 46 * U);
+        ctx.stroke();
+        drawOrb(t.seq[i], x, y - k * 46 * U - 4 * U, 16 * U, 0.85);
+      }
+      const el = t.seq[t.done];
+      drawOrb(el, x, y, r, 1);
+      drawCue(el, x, y, r, isFront);
+      if (isFront) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1.5 * U;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 4 * U, 0, TAU);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (shake > 0) ctx.translate(rand(-1, 1) * shake * 18 * U, rand(-1, 1) * shake * 18 * U);
-    ctx.drawImage(backdrop, 0, 0, W, H);
+    ctx.drawImage(ground, 0, 0, W, H);
+    const off = (((scrollY + clamp(dragY, -60, 60) * 0.5) % H) + H) % H;
+    ctx.drawImage(forest, 0, off, W, H);
+    ctx.drawImage(forest, 0, off - H, W, H);
 
-    // fireflies
     for (const f of fireflies) {
       const a = 0.25 + 0.25 * Math.sin(time * f.s + f.p);
       ctx.fillStyle = `rgba(220,255,170,${a})`;
       ctx.beginPath();
-      ctx.arc((f.x * W + Math.sin(time * 0.3 * f.s + f.p) * 26) % W, (f.y * H + Math.cos(time * 0.24 * f.s + f.p) * 22) % H, 1.4 * U, 0, TAU);
+      ctx.arc((f.x * W + Math.sin(time * 0.3 * f.s + f.p) * 26) % W, (f.y * H + off * 0.4) % H, 1.4 * U, 0, TAU);
       ctx.fill();
     }
 
     if (mode !== 'title') {
+      const hx = field.cx, hy = field.heartY;
+      const f = front();
+
+      // thread from the heart to the sign that is next
+      if (f && mode === 'play') {
+        ctx.strokeStyle = 'rgba(255,243,196,0.16)';
+        ctx.lineWidth = 2 * U;
+        ctx.setLineDash([4 * U, 8 * U]);
+        ctx.beginPath();
+        ctx.moveTo(hx, hy - 20 * U);
+        ctx.lineTo(targetX(f), f.y + 30 * U);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       for (const r of rings) {
-        ctx.strokeStyle = `rgba(${r.rgb},${Math.min(1, r.life * 1.6)})`;
+        ctx.strokeStyle = `rgba(${r.rgb},${Math.min(1, r.life * 2)})`;
         ctx.lineWidth = 3 * U;
         ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r, 0, TAU);
+        ctx.arc(r.x, r.y, Math.max(0.1, r.r), 0, TAU);
         ctx.stroke();
       }
 
-      for (const t of totems) drawTotem(t);
-
-      for (const m of motes) {
-        const fadeIn = Math.min(1, m.age * 2.2), fadeOut = Math.min(1, (m.life - m.age) / 3);
-        const bob = Math.sin(time * 2.2 + m.ph) * 3 * U;
-        drawOrb(m.el, m.x, m.y + bob, 12 * U, fadeIn * fadeOut);
-      }
-
-      // trail
-      if (tail.length) {
-        ctx.strokeStyle = 'rgba(255,243,196,0.22)';
-        ctx.lineWidth = 2 * U;
-        ctx.beginPath();
-        ctx.moveTo(wisp.x, wisp.y);
-        for (const n of tail) ctx.lineTo(n.x, n.y);
-        ctx.stroke();
-        for (let i = tail.length - 1; i >= 0; i--) {
-          const n = tail[i];
-          drawOrb(n.el, n.x, n.y, (i === 0 ? 11.5 : 9.5) * U, 1);
-          if (i === 0) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-            ctx.lineWidth = 1.5 * U;
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, 15 * U, 0, TAU);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // the wisp
-      const blink = wisp.safe > 0 && Math.sin(time * 30) > 0 ? 0.35 : 1;
-      glow(wisp.x, wisp.y, 46 * U, '255,236,170', 0.5 * blink);
-      ctx.fillStyle = `rgba(255,250,225,${blink})`;
-      ctx.beginPath();
-      ctx.arc(wisp.x, wisp.y, 8.5 * U, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(255,200,87,${0.9 * blink})`;
+      // the heart of the grove, where the spirit waits
+      const pulse = 1 + heartPulse * 0.35 + Math.sin(time * 3) * 0.04;
+      glow(hx, hy, 70 * U * pulse, '255,236,170', 0.5);
+      ctx.strokeStyle = 'rgba(255,220,150,0.35)';
       ctx.lineWidth = 1.5 * U;
+      ctx.beginPath();
+      ctx.ellipse(hx, hy + 6 * U, field.path * 0.8, 14 * U, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,250,225,1)';
+      ctx.beginPath();
+      ctx.arc(hx, hy, 12 * U * pulse, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,87,0.9)';
+      ctx.lineWidth = 2 * U;
       for (let i = 0; i < 3; i++) {
         const a = time * 2.4 + (i * TAU) / 3;
         ctx.beginPath();
-        ctx.arc(wisp.x, wisp.y, 13 * U, a, a + 1.1);
+        ctx.arc(hx, hy, 19 * U * pulse, a, a + 1.1);
         ctx.stroke();
       }
 
-      for (const s of shades) if (s.out <= 0) drawShade(s);
+      // draw far ones first so the front sign sits on top
+      const order = targets.slice().sort((a, b) => a.y - b.y);
+      for (const t of order) drawTarget(t, t === f);
+
+      for (const g of ghosts) drawOrb(g.el, g.x, g.y, g.r, clamp(g.life / g.max + 0.3, 0, 1));
 
       for (const p of particles) {
         ctx.fillStyle = `rgba(${p.rgb},${p.life / p.max})`;
@@ -789,22 +724,29 @@
         ctx.fill();
       }
 
-      // night closes in as the light fades; the wisp keeps a pool of light
-      const dark = clamp(1 - light, 0, 1) * 0.78;
+      // night closes in as the light fades
+      const dark = clamp(1 - light, 0, 1) * 0.7;
       if (dark > 0.02) {
-        const g = ctx.createRadialGradient(wisp.x, wisp.y, 50 * U, wisp.x, wisp.y, Math.max(W, H) * 0.8);
+        const g = ctx.createRadialGradient(hx, hy, 60 * U, hx, hy, H);
         g.addColorStop(0, 'rgba(2,5,10,0)');
-        g.addColorStop(0.45, `rgba(2,5,10,${dark * 0.8})`);
+        g.addColorStop(0.5, `rgba(2,5,10,${dark * 0.75})`);
         g.addColorStop(1, `rgba(2,5,10,${dark})`);
         ctx.fillStyle = g;
         ctx.fillRect(-40, -40, W + 80, H + 80);
       }
 
-      ctx.font = `${Math.round(20 * U)}px Palatino, Georgia, serif`;
       ctx.textAlign = 'center';
       for (const t of texts) {
-        ctx.fillStyle = `rgba(${t.rgb},${Math.min(1, t.life * 1.5)})`;
-        ctx.fillText(t.text, t.x, t.y);
+        ctx.font = `${Math.round(t.size * U)}px Palatino, Georgia, serif`;
+        ctx.fillStyle = `rgba(${t.rgb},${Math.min(1, t.life * 1.6)})`;
+        ctx.fillText(t.text, clamp(t.x, 50, W - 50), t.y);
+      }
+
+      if (combo >= 3 && mode === 'play') {
+        ctx.textAlign = 'left';
+        ctx.font = `${Math.round(16 * U)}px Palatino, Georgia, serif`;
+        ctx.fillStyle = 'rgba(255,243,196,0.85)';
+        ctx.fillText('Streak ' + combo + (multiplier() > 1 ? '  ×' + multiplier() : ''), 14, field.top + 22 * U);
       }
     }
   }
@@ -815,20 +757,13 @@
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
     if (mode === 'play' || mode === 'interlude') update(dt);
-    else if (mode === 'title' || mode === 'over') time += dt;
+    else if (mode === 'title' || mode === 'over') { time += dt; scrollY += H * 0.06 * dt; }
     updateHud();
     draw();
     requestAnimationFrame(frame);
   }
 
   /* ---------- Input ---------- */
-  const KEYMAP = {
-    ArrowLeft: 'left', a: 'left', A: 'left',
-    ArrowRight: 'right', d: 'right', D: 'right',
-    ArrowUp: 'up', w: 'up', W: 'up',
-    ArrowDown: 'down', s: 'down', S: 'down',
-  };
-
   function togglePause() {
     if (mode === 'play') setMode('pause');
     else if (mode === 'pause') { last = performance.now(); setMode('play'); }
@@ -837,37 +772,74 @@
     muted = !muted;
     ui.sound.classList.toggle('off', muted);
   }
+  function endHold() { holding = false; holdT = 0; }
 
-  window.addEventListener('keydown', (e) => {
-    if (KEYMAP[e.key]) { keys.add(KEYMAP[e.key]); e.preventDefault(); return; }
-    if (e.repeat) return;
-    if (e.key === ' ' || e.key === 'e' || e.key === 'E') {
-      e.preventDefault();
-      if (mode === 'play') releaseFront();
-      else if (mode === 'title' || mode === 'over') startGame();
-      else if (mode === 'pause') togglePause();
-    } else if (e.key === 'Enter' && (mode === 'title' || mode === 'over')) startGame();
-    else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
-    else if (e.key === 'm' || e.key === 'M') toggleSound();
-  });
-  window.addEventListener('keyup', (e) => { if (KEYMAP[e.key]) keys.delete(KEYMAP[e.key]); });
-  window.addEventListener('blur', () => { keys.clear(); if (mode === 'play') setMode('pause'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
-
-  function aim(e) {
-    pointer.x = e.clientX;
-    pointer.y = e.clientY;
-    pointer.active = true;
-  }
   canvas.addEventListener('pointerdown', (e) => {
     initAudio();
-    if (e.button === 2) { releaseFront(); return; }
-    aim(e);
+    if (ptr || e.button > 0) return;
+    ptr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), done: false };
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    dragY = 0;
+    holding = true;
+    holdT = 0;
   });
-  canvas.addEventListener('pointermove', aim);
+  canvas.addEventListener('pointermove', (e) => {
+    if (!ptr || e.pointerId !== ptr.id || ptr.done) return;
+    const dx = e.clientX - ptr.x0, dy = e.clientY - ptr.y0;
+    dragY = dy;
+    if (Math.hypot(dx, dy) > TAP_PX) endHold();
+    // fire as soon as the thumb has travelled far enough, without waiting for the lift
+    if (Math.abs(dy) >= SWIPE_PX && Math.abs(dy) > Math.abs(dx)) {
+      ptr.done = true;
+      dragY = 0;
+      gesture(dy < 0 ? 'up' : 'down');
+    }
+  });
+  function pointerEnd(e) {
+    if (!ptr || e.pointerId !== ptr.id) return;
+    const now = performance.now();
+    const moved = Math.hypot(e.clientX - ptr.x0, e.clientY - ptr.y0);
+    if (!ptr.done && e.type === 'pointerup' && moved <= TAP_PX && now - ptr.t0 < TAP_MS) {
+      if (now - lastTap < DOUBLE_MS) { lastTap = 0; gesture('like'); }
+      else lastTap = now;
+    }
+    ptr = null;
+    dragY = 0;
+    if (!keyHold) endHold();
+  }
+  canvas.addEventListener('pointerup', pointerEnd);
+  canvas.addEventListener('pointercancel', pointerEnd);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  ui.release.addEventListener('pointerdown', (e) => { e.preventDefault(); releaseFront(); });
+  // mouse wheel and trackpad: one gesture per flick, ignoring the inertia tail
+  window.addEventListener('wheel', (e) => {
+    if (mode !== 'play') return;
+    e.preventDefault();
+    const now = performance.now(), mag = Math.abs(e.deltaY);
+    const fresh = now - lastWheelT > 130 || mag > lastWheelMag * 1.6 + 4;
+    if (mag >= 4 && fresh && now - lastWheelT > 60) gesture(e.deltaY > 0 ? 'up' : 'down');
+    lastWheelT = now;
+    lastWheelMag = mag;
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) { if (['ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault(); return; }
+    const k = e.key;
+    if (mode === 'title' || mode === 'over') {
+      if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); }
+      return;
+    }
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') { e.preventDefault(); gesture('up'); }
+    else if (k === 'ArrowDown' || k === 's' || k === 'S') { e.preventDefault(); gesture('down'); }
+    else if (k === ' ') { e.preventDefault(); if (mode === 'pause') togglePause(); else gesture('like'); }
+    else if (k === 'Shift') { keyHold = true; holding = true; holdT = 0; }
+    else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
+    else if (k === 'm' || k === 'M') toggleSound();
+  });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Shift') { keyHold = false; endHold(); } });
+  window.addEventListener('blur', () => { keyHold = false; endHold(); if (mode === 'play') setMode('pause'); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
+
   $('btn-start').addEventListener('click', startGame);
   $('btn-again').addEventListener('click', startGame);
   $('btn-resume').addEventListener('click', togglePause);

@@ -1,19 +1,22 @@
-# Atumaa — Wake the Grove
+# Atumaa — Scroll the Grove
 
-A mythic arcade puzzle for the browser, made for [atumaa.com](https://atumaa.com).
+A one-thumb mythic arcade puzzle for the browser, made for [atumaa.com](https://atumaa.com).
 
-You are a forest spirit. Gather elemental motes (Leaf, Water, Sun, Moon), which trail behind
-you in the order you collect them, and carry them to the standing stones. Each stone asks for
-signs in a set sequence and only takes the mote nearest you, so the order you gather in is the
-puzzle. Light drains all the time, shades hunt you, and a waking stone banishes shades nearby.
+The game is played with the same thumb gestures people use to scroll reels and shorts. Signs
+rush down a forest path toward the heart of the grove, and each one is answered by a different
+gesture. The whole grove scrolls with every swipe, like a feed.
 
-## Controls
-
-| Action | Desktop | Touch |
+| Sign | Gesture (touch) | Keyboard / mouse |
 | --- | --- | --- |
-| Move | Mouse, WASD or arrow keys | Drag a finger |
-| Release front mote | Space, E or right click | Release button |
-| Pause / sound | P or Esc / M | Buttons at top right |
+| Leaf | Swipe up | ↑ or W, scroll wheel, drag up |
+| Water | Swipe down | ↓ or S, scroll wheel back, drag down |
+| Sun | Double-tap | Space, double-click |
+| Moon | Press and hold | Hold Shift, hold mouse button |
+| Shade | Do nothing, let it pass | — |
+
+Answer the sign nearest the heart first. A wrong gesture or a missed sign costs light; touching a
+shade costs more. Answering close to the heart scores higher, and streaks raise a multiplier.
+Later groves are faster and add bound signs that need several gestures in a row. P pauses, M mutes.
 
 ## Run locally
 
@@ -27,5 +30,5 @@ python3 -m http.server 8000
 
 - `index.html` — page, HUD and menus
 - `style.css` — styling
-- `game.js` — the whole game (canvas rendering, input, audio)
+- `game.js` — the whole game (canvas rendering, gestures, audio)
 - `CNAME` — custom domain for GitHub Pages
