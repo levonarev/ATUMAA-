@@ -34,6 +34,18 @@ from the trailer that adds one complication on top of the last:
 After Seat VII the game continues in faster cycles. Story text is kept in the `WORLDS`, `INTRO`
 and `ELEMENTS` tables at the top of `game.js`.
 
+## Feel and sound
+
+- **Haptics:** every event has its own light vibration: touch, tap, swipe, each kind of hit, a
+  wrong move, a missed signal, a streak, a seat cleared and the end of a run. Android browsers
+  use the Vibration API. iOS Safari has no such API, so the game toggles a hidden switch control
+  to get the system tick (iOS 17.4 or later; single ticks only). Toggle with the ≋ button or V.
+- **Sound:** all synthesised in the browser: a different hit per signal, wrong-move and miss
+  sounds, a tally at the end of each seat and a counting score at the end of a run. Toggle with
+  the ♪ button or M.
+- **Summaries:** each seat ends with accuracy and misses; the end screen lists answered,
+  missed, wrong moves, accuracy and best streak.
+
 ## Run locally
 
 It is a static site with no build step. Open `index.html`, or serve the folder:

@@ -44,7 +44,7 @@
     hud: $('hud'), grove: $('grove'), pips: $('pips'), light: $('light'), score: $('score'),
     clock: $('clock'), hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
-    finalScore: $('final-score'), finalDetail: $('final-detail'),
+    finalScore: $('final-score'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
     sound: $('btn-sound'),
   };
@@ -193,8 +193,72 @@
     o.start(t);
     o.stop(t + dur + 0.03);
   }
+  let noiseBuf = null;
+  function noise(dur, vol, freq, when = 0, q = 1) {
+    if (!ac || muted) return;
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, Math.round(ac.sampleRate * 0.6), ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const t = ac.currentTime + when;
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = noiseBuf;
+    f.type = 'bandpass';
+    f.frequency.value = freq;
+    f.Q.value = q;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(ac.destination);
+    src.start(t);
+    src.stop(t + dur + 0.02);
+  }
+
+  /* ---------- Haptics ---------- */
+  // Android browsers vibrate directly. iOS Safari has no vibration API, so there a hidden
+  // switch control is toggled, which makes the phone give its small system tick.
+  const canVibrate = typeof navigator.vibrate === 'function';
+  let hapticsOn = true, iosSwitch = null;
+  try { hapticsOn = localStorage.getItem('atumaa.haptics') !== 'off'; } catch (e) { /* storage blocked */ }
+  function initHaptics() {
+    if (canVibrate || iosSwitch || !TOUCH) return;
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.cssText = 'position:fixed;left:-200px;top:0;opacity:0;pointer-events:none';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.tabIndex = -1;
+    input.setAttribute('switch', '');
+    label.appendChild(input);
+    document.body.appendChild(label);
+    iosSwitch = label;
+  }
+  function buzz(pattern) {
+    if (!hapticsOn) return;
+    try {
+      if (canVibrate) navigator.vibrate(pattern);
+      else if (iosSwitch) {
+        const ticks = Array.isArray(pattern) ? Math.min(3, Math.ceil(pattern.length / 2)) : 1;
+        iosSwitch.click();
+        for (let k = 1; k < ticks; k++) setTimeout(() => iosSwitch.click(), k * 80);
+      }
+    } catch (e) { /* not supported */ }
+  }
+  // every kind of event has its own feel; all of them are short and light
+  const HAPTIC = {
+    touch: 3, tap: 5, swipe: 7,
+    up: 12, down: [6, 18, 10], like: [8, 28, 8], hold: 22,
+    wrong: [24, 45, 24], lostTime: [30, 40, 30, 40, 30], missed: [45, 40, 80],
+    letGo: 6, streak: [6, 30, 6, 30, 6], seat: [10, 55, 10, 55, 28], over: [70, 70, 150], tally: 3,
+  };
+
   const sfx = {
+    tap: () => tone(880, 0.035, 'sine', 0.03),
+    tally: (k) => tone(900 + k * 500, 0.03, 'square', 0.018),
+    perfect: () => [1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, 0.35, 'sine', 0.06, 0.75 + i * 0.07)),
+    best: () => [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.5, 'triangle', 0.07, i * 0.09)),
     hit: (el, step) => {
+      noise(0.05, 0.1, el === 3 ? 500 : 1900, 0, 1.2);
       const f = ELEMENTS[el].note * (1 + Math.min(step, 12) * 0.03);
       if (el === 0) tone(f, 0.16, 'triangle', 0.09, 0, f * 1.6);
       else if (el === 1) tone(f, 0.2, 'sine', 0.1, 0, f * 0.6);
@@ -202,8 +266,8 @@
       else tone(f * 0.5, 0.45, 'sine', 0.11);
     },
     swish: (up) => tone(up ? 220 : 330, 0.09, 'sine', 0.025, 0, up ? 420 : 170),
-    wrong: () => tone(140, 0.16, 'square', 0.04),
-    leak: () => { tone(120, 0.4, 'sawtooth', 0.09, 0, 50); tone(90, 0.3, 'square', 0.04, 0.03, 45); },
+    wrong: () => { tone(196, 0.1, 'square', 0.045); tone(147, 0.2, 'square', 0.045, 0.09); noise(0.12, 0.08, 320, 0, 0.8); },
+    leak: () => { tone(120, 0.45, 'sawtooth', 0.09, 0, 50); tone(90, 0.3, 'square', 0.04, 0.03, 45); noise(0.4, 0.2, 180, 0, 0.7); },
     pass: () => tone(660, 0.25, 'sine', 0.05, 0, 880),
     dawn: () => [392, 523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.8, 'sine', 0.07, i * 0.11)),
     over: () => [392, 329.63, 261.63, 196].forEach((f, i) => tone(f, 0.7, 'triangle', 0.08, i * 0.22)),
@@ -215,6 +279,10 @@
   let combo = 0, bestCombo = 0, cleared = 0, goal = 13, totalCleared = 0, spawned = 0;
   let spawnTimer = 0, interlude = 0, shake = 0, lastVoid = false;
   let scrollY = 0, scrollKick = 0, jolt = 0, heartPulse = 0;
+  const seatStats = { hit: 0, wrong: 0, missed: 0 }, runStats = { hit: 0, wrong: 0, missed: 0 };
+  let overT = 0, overTick = 0, overBest = false;
+  const tallyUp = (k) => { seatStats[k]++; runStats[k]++; };
+  const accuracy = (st) => { const n = st.hit + st.wrong + st.missed; return n ? Math.round((st.hit / n) * 100) : 100; };
   let best = 0;
   try { best = parseInt(localStorage.getItem('atumaa.best') || '0', 10) || 0; } catch (e) { /* storage blocked */ }
 
@@ -259,6 +327,7 @@
   function setupLevel(n) {
     level = n;
     cleared = 0;
+    seatStats.hit = seatStats.wrong = seatStats.missed = 0;
     goal = 10 + 3 * level;
     spawnTimer = 1.2;
     ui.grove.textContent = seatLabel();
@@ -270,6 +339,7 @@
     score = 0; light = 1; combo = 0; bestCombo = 0; totalCleared = 0; spawned = 0; level = 1;
     targets = []; ghosts = []; particles = []; rings = []; texts = [];
     for (const k in learned) learned[k] = 0;
+    runStats.hit = runStats.wrong = runStats.missed = 0;
     lastVoid = false;
     ptr = null; dragY = 0; holding = false; keyHold = false;
   }
@@ -346,11 +416,11 @@
     if (g === 'up') { scrollKick = 1500 * U; jolt = -22 * U; sfx.swish(true); }
     else if (g === 'down') { scrollKick = -1100 * U; jolt = 22 * U; sfx.swish(false); }
     const t = front();
-    if (!t) return;
+    if (!t) { buzz(HAPTIC.swipe); return; }
     if (t.shade) {
       if (g === 'hold') return;
       t.wob = 0.35;
-      penalty(0.12, 'You lost time', targetX(t), t.y);
+      penalty(0.12, 'You lost time', targetX(t), t.y, HAPTIC.lostTime);
       return;
     }
     if (needOf(t) === g) answer(t, t.seq[t.done]);
@@ -365,6 +435,8 @@
     const near = clamp((y - field.top) / (field.heartY - field.top), 0, 1);
     combo++;
     bestCombo = Math.max(bestCombo, combo);
+    tallyUp('hit');
+    buzz(combo % 8 === 0 ? HAPTIC.streak : HAPTIC[needOf(t)]);
     const pts = Math.round((10 + 20 * near) * multiplier() * (t.mirror || t.cloak ? 1.5 : 1));
     score += pts;
     light = Math.min(1, light + (el === 1 ? 0.03 : 0.012));
@@ -405,8 +477,10 @@
     if (cleared >= goal) startInterlude();
   }
 
-  function penalty(amount, label, x, y) {
+  function penalty(amount, label, x, y, feel) {
     light -= amount;
+    tallyUp('wrong');
+    buzz(feel || HAPTIC.wrong);
     combo = 0;
     shake = 0.2;
     texts.push({ x, y: y - 44 * U, text: label, life: 1, rgb: '255,150,140', size: 17 });
@@ -415,16 +489,20 @@
 
   function startInterlude() {
     mode = 'interlude';
-    interlude = 2.3;
-    const bonus = 200 * level;
+    interlude = 3;
+    const acc = accuracy(seatStats), perfect = seatStats.wrong + seatStats.missed === 0;
+    const bonus = 200 * level + (perfect ? 150 * level : 0);
     light = Math.min(1, light + 0.25);
     score += bonus;
     for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
     targets = [];
     rings.push({ x: field.cx, y: field.heartY, r: 20, max: Math.max(W, H) * 1.1, life: 1.6, rgb: world().accent });
     scrollKick = 2600 * U;
-    showBanner(level === 7 ? 'The seventh seat is taken<small>It was looking for you · +' + bonus + ' · the signal goes on</small>'
-      : world().name + '<small>' + seatLabel() + ' answered · +' + bonus + '</small>', 2.3);
+    showBanner(level === 7 ? 'The seventh seat is taken<small>It was looking for you · ' + acc + '% clean · +' + bonus + '</small>'
+      : world().name + '<small>' + seatLabel() + ' answered · ' + (perfect ? 'perfect signal' : acc + '% clean · ' + seatStats.missed + ' missed') + ' · +' + bonus + '</small>', 3);
+    buzz(HAPTIC.seat);
+    if (perfect) sfx.perfect();
+    for (let i = 0; i < 6; i++) setTimeout(() => { if (mode === 'interlude') sfx.tally(i / 6); }, 900 + i * 70);
     ui.hint.hidden = true;
     sfx.dawn();
   }
@@ -436,10 +514,14 @@
       best = score;
       try { localStorage.setItem('atumaa.best', String(best)); } catch (e) { /* storage blocked */ }
     }
-    ui.finalScore.textContent = score.toLocaleString();
-    ui.finalDetail.textContent = 'Reached ' + seatLabel() + ', ' + world().name + ' · ' + totalCleared + ' answered · best streak ' + bestCombo;
-    ui.bestOver.textContent = isBest && score > 0 ? 'New best!' : 'Best ' + best.toLocaleString();
+    overT = 0; overTick = 0; overBest = isBest && score > 0;
+    ui.finalScore.textContent = '0';
+    ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
+    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo]];
+    ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
+    ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
     sfx.over();
+    buzz(HAPTIC.over);
   }
 
   /* ---------- Update ---------- */
@@ -479,6 +561,8 @@
           combo++;
           bestCombo = Math.max(bestCombo, combo);
           learned.void++;
+          tallyUp('hit');
+          buzz(HAPTIC.letGo);
           const pts = 25 * multiplier();
           score += pts;
           burst(field.cx, field.heartY, '150,110,210', 16, 200);
@@ -487,6 +571,8 @@
         } else {
           light -= 0.2;
           combo = 0;
+          tallyUp('missed');
+          buzz(HAPTIC.missed);
           shake = 0.35;
           heartPulse = 1;
           burst(field.cx, field.heartY, '255,120,110', 24, 260);
@@ -1013,6 +1099,15 @@
       scrollY += H * 0.14 * dt;
       if (introT >= INTRO_TOTAL) startGame();
     } else if (mode === 'title' || mode === 'over') { time += dt; scrollY += H * 0.06 * dt; }
+    if (mode === 'over' && overT < 1) {
+      // the score counts up with a ticking tally once the falling tones have played
+      overT = Math.min(1, overT + dt / 1.3);
+      const k = clamp((overT - 0.35) / 0.65, 0, 1);
+      ui.finalScore.textContent = Math.round(score * ease(k)).toLocaleString();
+      overTick -= dt;
+      if (k > 0 && k < 1 && overTick <= 0 && score > 0) { overTick = 0.055; sfx.tally(k); buzz(HAPTIC.tally); }
+      if (overT >= 1 && overBest) { sfx.best(); buzz(HAPTIC.seat); }
+    }
     if (bannerT > 0 && mode !== 'pause') {
       bannerT -= dt;
       if (bannerT <= 0) ui.banner.hidden = true;
@@ -1032,10 +1127,18 @@
     ui.sound.classList.toggle('off', muted);
   }
   function endHold() { holding = false; holdT = 0; }
+  function toggleHaptics() {
+    hapticsOn = !hapticsOn;
+    ui.haptic.classList.toggle('off', !hapticsOn);
+    try { localStorage.setItem('atumaa.haptics', hapticsOn ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+    buzz(HAPTIC.like);
+  }
 
   canvas.addEventListener('pointerdown', (e) => {
     initAudio();
+    initHaptics();
     if (ptr || e.button > 0) return;
+    buzz(HAPTIC.touch);
     ptr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), done: false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
     dragY = 0;
@@ -1059,8 +1162,8 @@
     const now = performance.now();
     const moved = Math.hypot(e.clientX - ptr.x0, e.clientY - ptr.y0);
     if (!ptr.done && e.type === 'pointerup' && moved <= TAP_PX && now - ptr.t0 < TAP_MS) {
-      if (now - lastTap < DOUBLE_MS) { lastTap = 0; gesture('like'); }
-      else lastTap = now;
+      if (now - lastTap < DOUBLE_MS) { lastTap = 0; if (mode === 'play' && !front()) buzz(HAPTIC.tap); gesture('like'); }
+      else { lastTap = now; sfx.tap(); buzz(HAPTIC.tap); }
     }
     ptr = null;
     dragY = 0;
@@ -1093,6 +1196,7 @@
     else if (k === 'Shift') { keyHold = true; holding = true; holdT = 0; }
     else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
     else if (k === 'm' || k === 'M') toggleSound();
+    else if (k === 'v' || k === 'V') toggleHaptics();
   });
   window.addEventListener('keyup', (e) => { if (e.key === 'Shift') { keyHold = false; endHold(); } });
   window.addEventListener('blur', () => { keyHold = false; endHold(); if (mode === 'play') setMode('pause'); });
@@ -1104,6 +1208,9 @@
   $('btn-pause').addEventListener('click', togglePause);
   ui.skip.addEventListener('click', startGame);
   ui.sound.addEventListener('click', toggleSound);
+  ui.haptic.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
+  ui.haptic.classList.toggle('off', !hapticsOn);
+  for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
   window.addEventListener('resize', resize);
 
   /* ---------- Boot ---------- */
