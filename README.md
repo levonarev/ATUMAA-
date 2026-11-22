@@ -1,22 +1,36 @@
-# Atumaa — Scroll the Grove
+# Atumaa — The Seventh Seat
 
-A one-thumb mythic arcade puzzle for the browser, made for [atumaa.com](https://atumaa.com).
+A one-thumb sci-fi arcade puzzle for the browser, made for [atumaa.com](https://atumaa.com)
+and set in the world of the feature *The Seventh Seat*.
 
-The game is played with the same thumb gestures people use to scroll reels and shorts. Signs
-rush down a forest path toward the heart of the grove, and each one is answered by a different
-gesture. The whole grove scrolls with every swipe, like a feed.
+The game is played with the same thumb gestures people use to scroll reels and shorts. Signals
+rush down a lane toward the seat you are holding, and each is answered by a different gesture.
+The whole world scrolls with every swipe, like a feed.
 
-| Sign | Gesture (touch) | Keyboard / mouse |
+| Signal | Gesture (touch) | Keyboard / mouse |
 | --- | --- | --- |
-| Leaf | Swipe up | ↑ or W, scroll wheel, drag up |
-| Water | Swipe down | ↓ or S, scroll wheel back, drag down |
-| Sun | Double-tap | Space, double-click |
-| Moon | Press and hold | Hold Shift, hold mouse button |
-| Shade | Do nothing, let it pass | — |
+| Pulse | Swipe up | ↑ or W, scroll wheel, drag up |
+| Draw | Swipe down | ↓ or S, scroll wheel back, drag down |
+| Flare | Double-tap | Space, double-click |
+| Lock | Press and hold | Hold Shift, hold mouse button |
+| Void | Do nothing, let it pass | — |
 
-Answer the sign nearest the heart first. A wrong gesture or a missed sign costs light; touching a
-shade costs more. Answering close to the heart scores higher, and streaks raise a multiplier.
-Later groves are faster and add bound signs that need several gestures in a row. P pauses, M mutes.
+A ten-second opening shows the premise and every gesture. Then seven seats, each a new world
+that adds one complication on top of the last:
+
+| Seat | World | Adds |
+| --- | --- | --- |
+| I | Launch Ring | Pulse and Draw |
+| II | Ice Moon | Flare |
+| III | Dust Belt | The Void |
+| IV | Drowned Station | Lock |
+| V | Green Vault | Bound signals (several gestures in a row) |
+| VI | Mirror Reach | Mirrored signals (swipe the opposite way) |
+| VII | The Seventh Seat | Cloaked signals (revealed late) |
+
+After Seat VII the game continues in faster cycles. World names, the premise line and the
+signal names are placeholders kept in the `WORLDS`, `INTRO` and `ELEMENTS` tables at the top of
+`game.js`, so they can be replaced with the film's own.
 
 ## Run locally
 
