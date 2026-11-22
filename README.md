@@ -1,2 +1,2 @@
 # ATUMAA-
-This will be a repository abouth Atumaa game 
+This will be a repository about Atumaa game 
