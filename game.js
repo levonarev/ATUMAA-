@@ -670,7 +670,8 @@
     const x0 = field.cx - (cols * tw + (cols - 1) * gap) / 2;
     const y0 = Math.max(field.top + 96 * U, H * 0.5 - (rows * th + (rows - 1) * gap) / 2);
     const kinds = ['skip', 'time', 'score', 'shield', 'empty', 'empty'];
-    for (let i = kinds.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
+    // always a real gamble: the wall is shuffled afresh, even on a shared signal
+    for (let i = kinds.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
     bonus = { tiles: kinds.map((prize, i) => ({ prize, open: 0, x: x0 + (i % cols) * (tw + gap), y: y0 + Math.floor(i / cols) * (th + gap), w: tw, h: th })), picked: -1, t: 0, pickT: 0, applied: false };
     ptr = null; dragY = 0; endHold();
     setMode('bonus');
