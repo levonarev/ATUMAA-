@@ -296,6 +296,8 @@
   };
   let bonus = null;      // {tiles:[{x,y,w,h,prize,open}], picked, t, pickT, applied}
   let bonusAt = -1, bonusDone = false, shield = 0, memories = 0;
+  const ACTS = ['memory', 'metro', 'heart']; // one interval act per seat, in rotation
+  let act = null;        // the running metronome or heartbeat act
 
   let targets = [];   // {shade,seq,done,mirror,cloak,y,ph,wob}; they fall toward the seat, lowest one is the front
   let ghosts = [];    // answered signals flying off: {el,x,y,vx,vy,life,max,r}
@@ -353,7 +355,7 @@
     targets = []; ghosts = []; particles = []; rings = []; texts = [];
     for (const k in learned) learned[k] = 0;
     runStats.hit = runStats.wrong = runStats.missed = 0;
-    bonus = null; shield = 0; memories = 0;
+    bonus = null; act = null; shield = 0; memories = 0;
     lastVoid = false;
     ptr = null; dragY = 0; holding = false; keyHold = false;
   }
@@ -392,6 +394,7 @@
     if (!bonusDone && cleared + targets.length >= bonusAt) {
       bonusDone = true;
       t.bonus = true;
+      t.act = ACTS[(level - 1) % ACTS.length];
       lastVoid = false;
       targets.push(t);
       return;
@@ -438,7 +441,7 @@
     else if (g === 'down') { scrollKick = -1100 * U; jolt = 22 * U; sfx.swish(false); }
     const t = front();
     if (!t) { buzz(HAPTIC.swipe); return; }
-    if (t.bonus) { openBonus(t); return; }
+    if (t.bonus) { if (t.act === 'memory') openBonus(t); else startAct(t, t.act); return; }
     if (t.shade) {
       if (g === 'hold') return;
       t.wob = 0.35;
@@ -555,6 +558,106 @@
     }
   }
 
+  function startAct(t, type) {
+    burst(targetX(t), t.y, '230,196,106', 30, 320);
+    targets.splice(targets.indexOf(t), 1);
+    memories++;
+    ptr = null; dragY = 0; endHold();
+    if (type === 'metro') {
+      // two ticks to listen, then six to tap along with
+      act = { type, t: -0.6, beat: Math.max(0.5, 0.76 - 0.02 * level), n: 8, res: [], tick: 0, end: -1, note: '', noteT: -9 };
+    } else {
+      const spacing = 200 * U, period = Math.max(0.52, 0.82 - 0.03 * level);
+      act = { type, t: 0, spacing, speed: spacing / period, odd: 2 + ((Math.random() * 5) | 0), n: 9, blip: -1, end: -1, subtle: level >= 4 };
+    }
+    setMode('act');
+    [659.25, 987.77, 1318.5].forEach((f, i) => tone(f, 0.4, 'sine', 0.07, i * 0.09));
+    buzz(HAPTIC.seat);
+  }
+
+  function beatX(i) {
+    const a = act;
+    return W + 60 * U + i * a.spacing - a.speed * (a.end >= 0 ? a.end : a.t);
+  }
+
+  function finishAct(msg, sub, good) {
+    act.end = act.t;
+    act.msg = msg;
+    act.sub = sub;
+    act.good = good;
+    if (good) { sfx.best(); buzz(HAPTIC.streak); }
+    else { tone(196, 0.3, 'triangle', 0.06, 0, 130); buzz(HAPTIC.wrong); }
+  }
+
+  function actTap() {
+    const a = act;
+    if (!a || a.end >= 0) return;
+    if (a.type === 'metro') {
+      const k = Math.round(a.t / a.beat);
+      if (k < 3 || k > a.n || a.res[k]) return;
+      const off = Math.abs(a.t - k * a.beat);
+      const g = off < 0.07 ? 'perfect' : off < 0.15 ? 'good' : 'off';
+      a.res[k] = g;
+      a.note = g === 'perfect' ? 'Perfect' : g === 'good' ? 'Good' : 'Off';
+      a.noteT = a.t;
+      if (g === 'off') { sfx.wrong(); buzz(HAPTIC.wrong); }
+      else { tone(g === 'perfect' ? 1318.5 : 1046.5, 0.12, 'triangle', 0.08); buzz(HAPTIC.up); }
+    } else {
+      if (a.t < 0.5) return;
+      let near = 0, dist = 1e9;
+      for (let i = 0; i < a.n; i++) { const d = Math.abs(beatX(i) - field.cx); if (d < dist) { dist = d; near = i; } }
+      if (near === a.odd && dist < a.spacing * 0.45) {
+        const exact = dist < a.spacing * 0.14, pts = 300 * level;
+        score += pts;
+        light = Math.min(1, light + 0.3);
+        if (exact) shield++;
+        finishAct(exact ? 'Exact' : 'Found it', '+' + pts + ' · time back' + (exact ? ' · shield' : ''), true);
+      } else finishAct('That beat was true', 'No prize', false);
+    }
+  }
+
+  function updateAct(dt) {
+    const a = act;
+    time += dt;
+    a.t += dt;
+    if (a.end >= 0) {
+      if (a.t - a.end > 2.1) {
+        act = null;
+        setMode('play');
+        spawnTimer = Math.max(spawnTimer, 0.7);
+        last = performance.now();
+      }
+      return;
+    }
+    if (a.type === 'metro') {
+      const k = Math.floor(a.t / a.beat);
+      if (k > a.tick && k >= 1 && k <= a.n) {
+        a.tick = k;
+        tone(k <= 2 ? 660 : 990, 0.05, 'square', 0.05);
+        noise(0.03, 0.09, 2600, 0, 2);
+        buzz(HAPTIC.tap);
+      }
+      if (a.t > (a.n + 0.5) * a.beat) {
+        let perfect = 0, good = 0;
+        for (let i = 3; i <= a.n; i++) { if (a.res[i] === 'perfect') perfect++; else if (a.res[i] === 'good') good++; }
+        const hits = perfect + good, pts = (perfect * 80 + good * 40) * level;
+        score += pts;
+        let sub = pts ? '+' + pts : 'No prize';
+        if (hits >= 5) { light = 1; sub += ' · time restored'; }
+        if (perfect === 6) { shield++; sub += ' · shield'; }
+        finishAct(hits + ' of 6 in time', sub, hits >= 3);
+      }
+    } else {
+      const crossed = Math.floor((field.cx - beatX(0)) / a.spacing);
+      if (crossed > a.blip && crossed >= 0 && crossed < a.n) {
+        a.blip = crossed;
+        tone(880, 0.06, 'sine', 0.06);
+        buzz(HAPTIC.touch);
+      }
+      if (beatX(a.odd) < field.cx - a.spacing * 0.5) finishAct('It slipped past', 'No prize', false);
+    }
+  }
+
   function clearedOne() {
     cleared++;
     totalCleared++;
@@ -612,7 +715,7 @@
     overT = 0; overTick = 0; overBest = isBest && score > 0;
     ui.finalScore.textContent = '0';
     ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
-    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Memories', memories]];
+    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Interval acts', memories]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
     ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
     sfx.over();
@@ -652,7 +755,7 @@
       if (playing && t.y >= field.heartY - 30 * U) {
         targets.splice(i, 1);
         if (t.bonus) {
-          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Memory faded', life: 1, rgb: '200,190,160', size: 16 });
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'It faded', life: 1, rgb: '200,190,160', size: 16 });
           continue;
         }
         if (t.shade) {
@@ -749,7 +852,7 @@
     if (mode === 'play') {
       const t = front();
       if (t) {
-        if (t.bonus) hint = 'A Memory. Any move opens it';
+        if (t.bonus) hint = (t.act === 'metro' ? 'The metronome' : t.act === 'heart' ? 'A heartbeat' : 'A Memory') + '. Any move opens it';
         else if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
         else if (isCloaked(t)) { if (learned.cloak < 2) hint = 'Cloaked: it shows itself close to the seat'; }
         else if (t.mirror) { if (learned.mirror < 3) hint = 'Mirrored: swipe the opposite way'; }
@@ -928,7 +1031,20 @@
       ctx.fillStyle = `rgba(230,196,106,${0.75 + Math.sin(time * 6) * 0.25})`;
       ctx.font = `700 ${Math.round(26 * U)}px ${FONT}`;
       ctx.textAlign = 'center';
-      ctx.fillText('?', 0, 9 * U);
+      if (t.act === 'memory') ctx.fillText('?', 0, 9 * U);
+      else {
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 2.5 * U;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        if (t.act === 'metro') {
+          ctx.moveTo(-10 * U, 14 * U); ctx.lineTo(-4 * U, -14 * U); ctx.lineTo(4 * U, -14 * U); ctx.lineTo(10 * U, 14 * U); ctx.closePath();
+          ctx.moveTo(0, 10 * U); ctx.lineTo(9 * U, -12 * U);
+        } else {
+          ctx.moveTo(-20 * U, 2 * U); ctx.lineTo(-8 * U, 2 * U); ctx.lineTo(-3 * U, -14 * U); ctx.lineTo(3 * U, 14 * U); ctx.lineTo(8 * U, 2 * U); ctx.lineTo(20 * U, 2 * U);
+        }
+        ctx.stroke();
+      }
       ctx.restore();
     } else if (t.shade) {
       drawVoid(x, y, t.ph, isFront);
@@ -1088,6 +1204,141 @@
       ctx.restore();
     });
     ctx.globalAlpha = 1;
+  }
+
+  function beatShape(d, kind) {
+    const g = (c, w) => Math.exp(-(((d - c) / w) ** 2));
+    const rest = 8 * g(-34, 9) + 14 * g(42, 13);
+    if (kind === 0) return rest + 95 * g(0, 5) - 22 * g(10, 5);        // a true beat
+    if (kind === 1) return rest - 72 * g(0, 5) + 16 * g(10, 5);        // the wrong one: upside down
+    return rest + 62 * g(-7, 4) + 62 * g(7, 4) - 18 * g(0, 3);         // later seats: a split peak
+  }
+
+  function drawAct() {
+    const a = act, cx = field.cx, gold = '230,196,106';
+    ctx.fillStyle = `rgba(2,3,7,${0.8 * clamp((a.t + 0.6) * 4, 0, 1)})`;
+    ctx.fillRect(-40, -40, W + 80, H + 80);
+    ctx.textAlign = 'center';
+    const titleY = Math.max(field.top + 60 * U, H * 0.5 - 200 * U);
+    ctx.fillStyle = `rgb(${gold})`;
+    ctx.font = `700 ${Math.round(22 * U)}px ${FONT}`;
+    ctx.fillText(a.type === 'metro' ? 'THE METRONOME' : 'THE HEARTBEAT', cx, titleY);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = `600 ${Math.round(12.5 * U)}px ${FONT}`;
+
+    if (a.type === 'metro') {
+      const k = Math.floor(a.t / a.beat);
+      ctx.fillText(a.end >= 0 ? '' : k < 2 ? 'LISTEN' : 'TAP ON EVERY TICK', cx, titleY + 24 * U);
+      const by = H * 0.5 + 120 * U, py = by - 26 * U, len = 196 * U;
+      ctx.fillStyle = '#140e08';
+      ctx.strokeStyle = `rgba(${gold},0.9)`;
+      ctx.lineWidth = 2.5 * U;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 74 * U, by); ctx.lineTo(cx - 24 * U, by - 236 * U); ctx.lineTo(cx + 24 * U, by - 236 * U); ctx.lineTo(cx + 74 * U, by);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // the centre mark lights up on each tick
+      const onBeat = Math.abs(a.t - Math.round(a.t / a.beat) * a.beat) < 0.07 && a.t > 0 && a.end < 0;
+      ctx.strokeStyle = onBeat ? '#fff' : `rgba(${gold},0.35)`;
+      ctx.lineWidth = (onBeat ? 4 : 2) * U;
+      ctx.beginPath();
+      ctx.moveTo(cx, by - 220 * U); ctx.lineTo(cx, py - 20 * U);
+      ctx.stroke();
+      const ang = a.end >= 0 ? 0 : 0.62 * Math.sin((Math.PI * a.t) / a.beat);
+      const tx = cx + Math.sin(ang) * len, ty = py - Math.cos(ang) * len;
+      ctx.strokeStyle = '#f3ead2';
+      ctx.lineWidth = 4 * U;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, py); ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.fillStyle = `rgb(${gold})`;
+      ctx.beginPath();
+      ctx.arc(cx + Math.sin(ang) * len * 0.62, py - Math.cos(ang) * len * 0.62, 11 * U, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, py, 6 * U, 0, TAU);
+      ctx.fill();
+      // six lamps, one per scored tick
+      for (let i = 3; i <= a.n; i++) {
+        const r = a.res[i], x = cx + (i - 5.5) * 26 * U, y = by + 34 * U;
+        ctx.beginPath();
+        ctx.arc(x, y, 8 * U, 0, TAU);
+        if (r) { ctx.fillStyle = r === 'perfect' ? `rgb(${gold})` : r === 'good' ? 'rgb(125,220,132)' : 'rgb(255,120,110)'; ctx.fill(); }
+        else { ctx.strokeStyle = k >= i ? 'rgba(255,120,110,0.7)' : 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2 * U; ctx.stroke(); }
+      }
+      if (a.end < 0 && a.t - a.noteT < 0.45) {
+        ctx.fillStyle = a.note === 'Off' ? 'rgb(255,150,140)' : '#fffbe6';
+        ctx.font = `700 ${Math.round(20 * U)}px ${FONT}`;
+        ctx.fillText(a.note.toUpperCase(), cx, by + 76 * U);
+      }
+    } else {
+      ctx.fillText(a.end >= 0 ? '' : 'TAP WHEN THE WRONG BEAT CROSSES THE LINE', cx, titleY + 24 * U);
+      const pw = Math.min(W - 24, 720 * U), ph = 250 * U, px = cx - pw / 2, cy = H * 0.5 + 10 * U, py = cy - ph / 2;
+      ctx.fillStyle = '#03130f';
+      ctx.strokeStyle = 'rgba(90,235,190,0.5)';
+      ctx.lineWidth = 2 * U;
+      ctx.beginPath();
+      ctx.roundRect(px, py, pw, ph, 18 * U);
+      ctx.fill();
+      ctx.stroke();
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(90,235,190,0.09)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = px; x < px + pw; x += 28 * U) { ctx.moveTo(x, py); ctx.lineTo(x, py + ph); }
+      for (let y = py; y < py + ph; y += 28 * U) { ctx.moveTo(px, y); ctx.lineTo(px + pw, y); }
+      ctx.stroke();
+      const x0 = beatX(0), base = cy + 30 * U;
+      ctx.strokeStyle = 'rgb(110,245,200)';
+      ctx.lineWidth = 2.5 * U;
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(90,235,190,0.9)';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      for (let x = px; x <= px + pw; x += 2) {
+        const i = Math.round((x - x0) / a.spacing);
+        const v = i >= 0 && i < a.n ? beatShape((x - x0 - i * a.spacing) / U, i === a.odd ? (a.subtle ? 2 : 1) : 0) : 0;
+        if (x === px) ctx.moveTo(x, base - v * U); else ctx.lineTo(x, base - v * U);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (a.end >= 0) {
+        // ring the wrong beat, the way it is circled on the scope in the film
+        ctx.strokeStyle = a.good ? `rgb(${gold})` : 'rgb(255,120,110)';
+        ctx.lineWidth = 3 * U;
+        ctx.beginPath();
+        ctx.ellipse(beatX(a.odd), base - 10 * U, 44 * U, 84 * U, 0, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = `rgba(${gold},0.9)`;
+      ctx.lineWidth = 2 * U;
+      ctx.beginPath();
+      ctx.moveTo(cx, py - 8 * U); ctx.lineTo(cx, py + ph + 8 * U);
+      ctx.stroke();
+      ctx.fillStyle = `rgb(${gold})`;
+      for (const s of [-1, 1]) {
+        const y = s < 0 ? py - 8 * U : py + ph + 8 * U;
+        ctx.beginPath();
+        ctx.moveTo(cx - 8 * U, y + s * 10 * U); ctx.lineTo(cx + 8 * U, y + s * 10 * U); ctx.lineTo(cx, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    if (a.end >= 0) {
+      const y = H * 0.5 + 200 * U;
+      ctx.fillStyle = a.good ? `rgb(${gold})` : 'rgb(255,150,140)';
+      ctx.font = `700 ${Math.round(24 * U)}px ${FONT}`;
+      ctx.fillText(a.msg.toUpperCase(), cx, Math.min(y, H - 70));
+      ctx.fillStyle = '#fff';
+      ctx.font = `600 ${Math.round(14 * U)}px ${FONT}`;
+      ctx.fillText(a.sub.toUpperCase(), cx, Math.min(y, H - 70) + 26 * U);
+    }
   }
 
   function drawThumb(x, y, pressed, alpha) {
@@ -1286,6 +1537,7 @@
       ctx.stroke();
     }
     if (mode === 'bonus' && bonus) drawBonus();
+    if (mode === 'act' && act) drawAct();
     if (combo >= 3 && mode === 'play') {
       ctx.textAlign = 'left';
       ctx.font = `${Math.round(15 * U)}px ${FONT}`;
@@ -1301,6 +1553,7 @@
     last = now;
     if (mode === 'play' || mode === 'interlude') update(dt);
     else if (mode === 'bonus') updateBonus(dt);
+    else if (mode === 'act') updateAct(dt);
     else if (mode === 'intro') {
       time += dt;
       introT += dt;
@@ -1345,6 +1598,7 @@
   canvas.addEventListener('pointerdown', (e) => {
     initAudio();
     initHaptics();
+    if (mode === 'act') { actTap(); return; }
     if (mode === 'bonus' && bonus) {
       const i = bonus.tiles.findIndex((q) => e.clientX >= q.x && e.clientX <= q.x + q.w && e.clientY >= q.y && e.clientY <= q.y + q.h);
       if (i >= 0) pickBonus(i);
@@ -1404,6 +1658,7 @@
     if (mode === 'over') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
     if (mode === 'bonus') { if (k >= '1' && k <= '6') pickBonus(+k - 1); return; }
+    if (mode === 'act') { if (k === ' ' || k === 'Enter' || k.startsWith('Arrow')) { e.preventDefault(); actTap(); } return; }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') { e.preventDefault(); gesture('up'); }
     else if (k === 'ArrowDown' || k === 's' || k === 'S') { e.preventDefault(); gesture('down'); }
     else if (k === ' ') { e.preventDefault(); if (mode === 'pause') togglePause(); else gesture('like'); }

@@ -34,12 +34,19 @@ from the trailer that adds one complication on top of the last:
 After Seat VII the game continues in faster cycles. Story text is kept in the `WORLDS`, `INTRO`
 and `ELEMENTS` tables at the top of `game.js`.
 
-## Interval act: Memories
+## Interval acts
 
-Once per seat a golden Memory signal comes down the lane. Any move opens it. The run pauses
-and a wall of six screens appears; tap one, see what it held, then watch the other five open.
-Behind them: skip to the next seat, full time, a score bonus, a shield that forgives one
-mistake, and two empty screens. A Memory you fail to touch simply fades, with no penalty.
+Once per seat a golden signal comes down the lane. Any move opens it and the run pauses for a
+short act. A signal you fail to touch simply fades, with no penalty. The three acts rotate:
+
+- **Memory** (seats I, IV, VII): a wall of six screens. Tap one, see what it held, then watch
+  the others open. Behind them: skip to the next seat, full time, a score bonus, a shield that
+  forgives one mistake, and two empty screens.
+- **The Metronome** (seats II, V): two ticks to listen, then six to tap along with. Points for
+  every tick in time; five or more restores the time; six perfect ones add a shield.
+- **The Heartbeat** (seats III, VI): a trace scrolls across a scope. One beat is wrong. Tap as
+  it crosses the line for points and time back; an exact tap adds a shield. Tapping a true beat
+  ends the act with nothing. From seat IV the wrong beat is subtler.
 
 ## Feel and sound
 
