@@ -59,7 +59,8 @@ sent to a server: the whole signal lives in the link.
 ## Today's signal and sharing
 
 - **Today's signal:** one run a day, the same for everyone, made by hashing the date into a
-  signal code. The best score for the day is kept on the device. `atumaa.com/?daily` opens it.
+  signal code. The best score for the day is kept on the device. Links carry the date (`?daily=2026-11-23`), so a shared result always opens the run it was
+  played on. The day turns over at 00:00 UTC and the end screen shows that time on the player's clock.
 - **Share this run:** every run ends with a share button. Where the phone supports it, it
   shares a 9:16 card (seat reached, score, clean percentage, the signal's mark) with a result
   line such as `ATUMAA IV · 96% clean · 12,340 · 3 signals short of The Corridor`; otherwise it

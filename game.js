@@ -53,7 +53,7 @@
     glyphTitle: $('glyph-title'), glyphCompose: $('glyph-compose'), glyphOver: $('glyph-over'),
     tapPad: $('tap-pad'), composeHint: $('compose-hint'), composeCount: $('compose-count'),
     playSignal: $('btn-play-signal'), redo: $('btn-redo'),
-    overTitle: $('over-title'), daily: $('btn-daily'), sound2: $('btn-sound2'), haptic2: $('btn-haptic2'),
+    overTitle: $('over-title'), daily: $('btn-daily'), daily2: $('btn-daily2'), signalBtn: $('btn-signal'), sound2: $('btn-sound2'), haptic2: $('btn-haptic2'),
     signalResult: $('signal-result'), share: $('btn-share'), shareNote: $('share-note'), free: $('btn-free'),
   };
 
@@ -428,10 +428,10 @@
     if (!musicNext || musicNext < ac.currentTime - 0.3) musicNext = ac.currentTime + 0.05;
     while (musicNext < ac.currentTime + 0.2) {
       const when = Math.max(0, musicNext - ac.currentTime), st = musicStep % 8, root = ROOTS[seatOf(level) - 1];
-      if (st % 4 === 0) tone(105, 0.16, 'sine', 0.1, when, 44);           // pulse
+      if (st % 4 === 0) tone(105, 0.16, 'sine', 0.045, when, 44);           // pulse
       if (st % 4 === 2) noise(0.03, 0.03, 5200, when, 3);                  // metronome tick
       const bass = [1, 0, 0, 1.5, 1.2, 0, 1.5, 0][st];
-      if (bass) tone(root * bass, 0.24, 'triangle', 0.032, when);
+      if (bass) tone(root * bass, 0.24, 'triangle', 0.026, when);
       if (st === 6 && musicStep % 16 === 14) tone(root * 4, 0.5, 'sine', 0.018, when);
       musicNext += step;
       musicStep++;
@@ -468,8 +468,8 @@
   const seatStats = { hit: 0, wrong: 0, missed: 0 }, runStats = { hit: 0, wrong: 0, missed: 0 };
   let overT = 0, overTick = 0, overBest = false;
   const tallyUp = (k) => { seatStats[k]++; runStats[k]++; };
-  const accuracy = (st) => { const n = st.hit + st.wrong + st.missed; return n ? Math.round((st.hit / n) * 100) : 100; };
-  let best = 0;
+  const accuracy = (st) => { const n = st.hit + st.wrong + st.missed; return n ? Math.round((st.hit / n) * 100) : 0; };
+  let best = 0, played = false;
   try { best = parseInt(localStorage.getItem('atumaa.best') || '0', 10) || 0; } catch (e) { /* storage blocked */ }
 
   // interval act: a Memory signal opens a wall of six screens; pick one, then all are revealed
@@ -526,7 +526,7 @@
   function signalFromUrl() {
     try {
       const p = new URLSearchParams(location.search);
-      if (p.has('daily')) return dailySignal();
+      if (p.has('daily')) { const d = p.get('daily') || ''; return dailySignal(/^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : today()); }
       const m = parseInt(p.get('p') || '', 36);
       return makeSignal((p.get('s') || '').toLowerCase(), Number.isFinite(m) && m > 0 ? m : null, false);
     } catch (e) { return null; }
@@ -534,13 +534,19 @@
 
   // one signal a day, the same for everyone: the date is hashed into a signal code
   function today() { return new Date().toISOString().slice(0, 10); }
-  function dailySignal() {
-    const d = today();
+  function dailySignal(day) {
+    const d = day || today();
     let h = 2166136261;
     for (const c of 'atumaa ' + d) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
     const sig = makeSignal(((h >>> 0) % 0x100000).toString(16).padStart(5, '0'), null, false);
     sig.daily = d;
     return sig;
+  }
+  function dayLabel(d) { return d === today() ? "Today's signal" : 'The signal of ' + d; }
+  // the day turns over at 00:00 UTC for everyone; show that moment on the player's own clock
+  function resetTime() {
+    const n = new Date();
+    return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   function dailyBest(d) { try { return parseInt(localStorage.getItem('atumaa.daily.' + d) || '0', 10) || 0; } catch (e) { return 0; } }
   function playDaily() {
@@ -549,7 +555,7 @@
   }
 
   function signalUrl(sig, mark) {
-    if (sig.daily) return location.origin + location.pathname + '?daily';
+    if (sig.daily) return location.origin + location.pathname + '?daily=' + sig.daily;
     return location.origin + location.pathname + '?s=' + sig.code + (mark > 0 ? '&p=' + Math.round(mark).toString(36) : '');
   }
 
@@ -696,7 +702,7 @@
       g.drawImage(mark, cx - 180, 1320);
       g.fillStyle = 'rgba(255,255,255,0.8)';
       g.font = `600 38px ${FONT}`;
-      g.fillText(signal.daily ? "TODAY'S SIGNAL · " + signal.daily : 'ANSWER THIS SIGNAL', cx, 1730);
+      g.fillText(signal.daily ? 'SIGNAL OF ' + signal.daily : 'ANSWER THIS SIGNAL', cx, 1730);
     } else {
       g.fillStyle = '#fffbe6';
       g.beginPath(); g.arc(cx, 1500, 44, 0, TAU); g.fill();
@@ -707,24 +713,32 @@
     return cv;
   }
 
-  function shareSignal() {
-    const url = signal ? signalUrl(signal, score) : location.origin + location.pathname;
-    const lead = !signal ? '' : signal.daily ? "Today's signal. " : signal.mine ? 'I sent you a signal. Answer it. ' : 'I answered this signal. Your turn. ';
-    const text = lead + resultLine();
-    const note = (msg) => { ui.shareNote.textContent = msg; };
-    const plain = () => {
-      if (navigator.share) navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch(() => { /* closed without sharing */ });
-      else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
-      else note(text + ' ' + url);
-    };
+  // iOS only opens the share sheet from inside the tap itself, so nothing here may wait:
+  // the card image is built when the run ends and attached only if it is already there.
+  let cardFile = null;
+  function buildCard() {
+    cardFile = null;
     try {
       makeCard().toBlob((blob) => {
-        const file = blob && typeof File === 'function' ? new File([blob], 'atumaa.png', { type: 'image/png' }) : null;
-        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], text: text + ' ' + url }).catch(() => { /* closed without sharing */ });
-        } else plain();
+        if (blob && typeof File === 'function') cardFile = new File([blob], 'atumaa.png', { type: 'image/png' });
       }, 'image/png');
-    } catch (e) { plain(); }
+    } catch (e) { /* no card, text only */ }
+  }
+
+  function shareSignal() {
+    const url = signal ? signalUrl(signal, score) : location.origin + location.pathname;
+    const lead = !signal ? '' : signal.daily ? dayLabel(signal.daily) + '. ' : signal.mine ? 'I sent you a signal. Answer it. ' : 'I answered this signal. Your turn. ';
+    const text = lead + resultLine();
+    const note = (msg) => { ui.shareNote.textContent = msg; };
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
+      else note(text + ' ' + url);
+    };
+    if (!navigator.share) { copy(); return; }
+    let withCard = false;
+    try { withCard = !!(cardFile && navigator.canShare && navigator.canShare({ files: [cardFile] })); } catch (e) { withCard = false; }
+    navigator.share(withCard ? { files: [cardFile], text: text + ' ' + url } : { title: 'Atumaa — The Seventh Seat', text, url })
+      .catch((err) => { if (!err || err.name !== 'AbortError') copy(); }); // closing the sheet is not a failure
   }
 
   function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (level - 1))) * H; }
@@ -803,6 +817,7 @@
     const playing = m === 'play' || m === 'interlude';
     ui.title.hidden = m !== 'title';
     ui.compose.hidden = m !== 'compose';
+    if (m === 'title') { const fresh = !played; ui.daily.hidden = fresh; ui.signalBtn.hidden = fresh; }
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
     ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose';
@@ -1142,11 +1157,19 @@
     overT = 0; overTick = 0; overBest = isBest && score > 0;
     ui.finalScore.textContent = '0';
     const left = Math.max(1, goal - cleared);
-    overLine = left + ' signal' + (left === 1 ? '' : 's') + ' short of ' + (level < 7 ? WORLDS[level].name : level === 7 ? 'the seventh seat' : 'the next cycle');
+    const sigs = left + ' signal' + (left === 1 ? '' : 's');
+    // close to the end of a seat, name what was nearly reached; otherwise name where the run fell
+    overLine = left <= 4 && level < 7 ? sigs + ' short of ' + WORLDS[level].name
+      : left <= 4 && level === 7 ? sigs + ' short of taking the seventh seat'
+      : 'Fell in ' + world().name + (level > 7 ? ', cycle ' + (level - 6) : '') + ' with ' + left + ' to go';
     ui.overTitle.textContent = overLine;
     ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
     const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Interval acts', memories]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
+    buildCard();
+    played = true;
+    try { localStorage.setItem('atumaa.played', '1'); } catch (e) { /* storage blocked */ }
+    ui.daily2.hidden = !!(signal && signal.daily === today());
     ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
     // a signal run ends with its mark, how it went against the sender, and a way to send it on
     const sig = signal;
@@ -1160,12 +1183,12 @@
         dayBest = Math.max(dailyBest(sig.daily), score);
         try { localStorage.setItem('atumaa.daily.' + sig.daily, String(dayBest)); } catch (e) { /* storage blocked */ }
       }
-      ui.signalResult.textContent = sig.daily ? "Today's signal: the same run for everyone. Your best today is " + dayBest.toLocaleString() + '.'
+      ui.signalResult.textContent = sig.daily ? dayLabel(sig.daily) + ': the same run for everyone. Your best is ' + dayBest.toLocaleString() + '.' + (sig.daily === today() ? ' A new signal arrives at ' + resetTime() + '.' : '')
         : sig.mine ? 'Your signal is ready. Send it and see who can answer it.'
         : !sig.mark ? 'You answered the signal.'
         : score > sig.mark ? 'You answered it. Their mark was ' + sig.mark.toLocaleString() + '.'
         : 'The signal holds. Their mark is ' + sig.mark.toLocaleString() + '.';
-      ui.share.textContent = sig.daily ? "Share today's result" : sig.mine ? 'Send this signal' : 'Pass it on';
+      ui.share.textContent = sig.daily ? 'Share this result' : sig.mine ? 'Send this signal' : 'Pass it on';
     }
     sfx.over();
     buzz(HAPTIC.over);
@@ -1179,11 +1202,12 @@
 
     // press-and-hold fills a ring, then fires
     if (holding && playing) {
-      const was = holdT;
-      holdT += dt / HOLD_S;
-      // the thumb feels the ring fill, but only when a hold is what is being asked for
+      // the ring only charges when the signal in front is a Lock, so a slow tap can never turn into one
       const f = front();
-      if (f && !f.shade && !f.bonus && needOf(f) === 'hold') for (const m of [0.3, 0.6, 0.9]) if (was < m && holdT >= m) buzz(HAPTIC.holdTick);
+      const lock = !!(f && !f.shade && !f.bonus && needOf(f) === 'hold');
+      const was = holdT;
+      holdT = lock ? holdT + dt / HOLD_S : 0;
+      if (lock) for (const m of [0.3, 0.6, 0.9]) if (was < m && holdT >= m) buzz(HAPTIC.holdTick);
       if (holdT >= 1) {
         holding = false;
         holdT = 0;
@@ -1971,9 +1995,9 @@
 
     // a mistake flashes the edges red, so it lands even where the phone cannot vibrate
     if (flash > 0) {
-      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
-      g.addColorStop(0, 'rgba(255,60,50,0)');
-      g.addColorStop(1, `rgba(255,60,50,${0.5 * flash})`);
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.12, W / 2, H / 2, Math.max(W, H) * 0.7);
+      g.addColorStop(0, `rgba(255,60,50,${0.16 * flash})`);
+      g.addColorStop(1, `rgba(255,50,40,${0.85 * flash})`);
       ctx.fillStyle = g;
       ctx.fillRect(-40, -40, W + 80, H + 80);
     }
@@ -2102,7 +2126,7 @@
     const moved = Math.hypot(e.clientX - ptr.x0, e.clientY - ptr.y0);
     if (!ptr.done && e.type === 'pointerup' && moved <= TAP_PX && now - ptr.t0 < TAP_MS) {
       if (now - lastTap < DOUBLE_MS) { lastTap = 0; if (mode === 'play' && !front()) buzz(HAPTIC.tap); gesture('like'); }
-      else { lastTap = now; sfx.tap(); buzz(HAPTIC.tap); }
+      else lastTap = now; // no click, no buzz: the thumb has not done anything yet
     }
     ptr = null;
     dragY = 0;
@@ -2159,8 +2183,9 @@
   ui.sound2.addEventListener('click', toggleSound);
   ui.haptic2.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.daily.addEventListener('click', playDaily);
+  ui.daily2.addEventListener('click', playDaily);
   syncToggles();
-  for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
+  for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily', 'btn-daily2']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
 
   // send a signal
   $('btn-signal').addEventListener('click', openCompose);
@@ -2176,13 +2201,14 @@
   window.addEventListener('resize', resize);
 
   /* ---------- Boot ---------- */
+  try { played = best > 0 || localStorage.getItem('atumaa.played') === '1'; } catch (e) { played = best > 0; }
   if (best > 0) ui.bestTitle.textContent = 'Best ' + best.toLocaleString();
   // opened from a friend's link: their signal is waiting on the title screen
   signal = signalFromUrl();
   if (signal) {
     ui.glyphTitle.hidden = false;
     drawGlyph(ui.glyphTitle, signal);
-    ui.premise.textContent = signal.daily ? "Today's signal is waiting. Everyone gets the same run. Answer it." : 'A signal is waiting for you.' + (signal.mark ? ' The mark to beat is ' + signal.mark.toLocaleString() + '.' : '') + ' Answer it.';
+    ui.premise.textContent = signal.daily ? dayLabel(signal.daily) + ' is waiting. Everyone who opens it gets the same run. Answer it.' : 'A signal is waiting for you.' + (signal.mark ? ' The mark to beat is ' + signal.mark.toLocaleString() + '.' : '') + ' Answer it.';
     ui.start.textContent = 'Answer it';
   }
   resize();
