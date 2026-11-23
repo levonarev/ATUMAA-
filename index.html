@@ -98,6 +98,16 @@
     <p id="best-over" class="best"></p>
     <canvas id="glyph-over" class="glyph" width="192" height="192" hidden></canvas>
     <p id="signal-result" hidden></p>
+    <p id="streak-line" class="best" hidden></p>
+    <div id="board" hidden>
+      <h3>The seventh seat today</h3>
+      <p id="board-count" class="controls"></p>
+      <ol id="board-list"></ol>
+      <div id="board-form">
+        <input id="board-name" type="text" maxlength="12" placeholder="Your name" autocomplete="nickname" aria-label="Your name for the board">
+        <button id="btn-post" class="secondary" type="button">Take a seat</button>
+      </div>
+    </div>
     <button id="btn-share" class="primary" type="button">Share this run</button>
     <p id="share-note" class="controls"></p>
     <button id="btn-again" class="primary" type="button">Try again</button>

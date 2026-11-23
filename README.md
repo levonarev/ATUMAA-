@@ -71,6 +71,14 @@ order and timing for everyone who opens the link, with no time meter, prizes or 
 The link carries the sender's result (`&p=<score>&r=<answered>`), so the recipient sees
 "A friend answered 12 of 13" and the end screen compares the two and offers a rematch.
 
+## Daily streak and the board
+
+- **Daily streak:** finishing today's transmission extends a streak kept on the device; missing
+  a day resets it. It shows on the end screen and on the title button.
+- **The seventh seat today:** a worldwide board for today's transmission. It needs the small
+  server in `backend/` (a Cloudflare Worker; see `backend/README.md`). Until that server's
+  address is put in `BOARD_URL` in `game.js`, the board is hidden and nothing is sent anywhere.
+
 ## The ending
 
 Clearing Seat VII stops the action: the signal goes back, six seats answer one by one, and the
@@ -120,4 +128,5 @@ python3 -m http.server 8000
 - `style.css` — styling
 - `game.js` — the whole game (canvas rendering, gestures, audio)
 - `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png`, `og.png` — install and link-preview assets
+- `backend/` — the board server and how to deploy it (not served as part of the game)
 - `CNAME` — custom domain for GitHub Pages

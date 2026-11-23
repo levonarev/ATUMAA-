@@ -45,6 +45,7 @@
     hud: $('hud'), grove: $('grove'), pips: $('pips'), light: $('light'), score: $('score'),
     clock: $('clock'), hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
+    board: $('board'), boardCount: $('board-count'), boardList: $('board-list'), boardName: $('board-name'), post: $('btn-post'), streak: $('streak-line'),
     finalScore: $('final-score'), again: $('btn-again'), endless: $('btn-endless'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
     sound: $('btn-sound'),
@@ -654,6 +655,70 @@
     startGame();
   }
 
+  /* ---------- Daily streak and the worldwide board ---------- */
+  // The board needs the small server in backend/worker.js. Until its address is set here,
+  // the board stays hidden and nothing is sent anywhere.
+  const BOARD_URL = '';
+
+  function dayBefore(d) {
+    const t = new Date(d + 'T00:00:00Z');
+    t.setUTCDate(t.getUTCDate() - 1);
+    return t.toISOString().slice(0, 10);
+  }
+  function readStreak() {
+    try {
+      const v = JSON.parse(localStorage.getItem('atumaa.streak') || 'null');
+      if (v && Number.isInteger(v.n) && typeof v.last === 'string') return v;
+    } catch (e) { /* storage blocked or damaged */ }
+    return { n: 0, last: '' };
+  }
+  // a streak is alive if today's or yesterday's transmission was finished
+  function liveStreak() {
+    const v = readStreak();
+    return v.last === today() || v.last === dayBefore(today()) ? v.n : 0;
+  }
+  function bumpStreak() {
+    const v = readStreak(), t = today();
+    if (v.last === t) return v.n;
+    const n = v.last === dayBefore(t) ? v.n + 1 : 1;
+    try { localStorage.setItem('atumaa.streak', JSON.stringify({ n, last: t })); } catch (e) { /* storage blocked */ }
+    return n;
+  }
+  const days = (n) => n + ' day' + (n === 1 ? '' : 's');
+
+  function cleanName(v) { return String(v || '').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 12); }
+  function renderBoard(data) {
+    if (!data || !Array.isArray(data.top)) return;
+    ui.boardCount.textContent = data.count ? data.count + (data.count === 1 ? ' person has' : ' people have') + ' answered today' : 'Nobody has taken a seat yet today';
+    ui.boardList.textContent = '';
+    const me = cleanName(ui.boardName.value).toLowerCase();
+    data.top.forEach((e) => {
+      // names come from other players, so they are only ever written as text
+      const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('span');
+      a.textContent = String(e.name).slice(0, 12);
+      b.textContent = e.ok + ' of ' + TX_N + ' · ' + Number(e.score).toLocaleString();
+      if (String(e.name).toLowerCase() === me) li.className = 'me';
+      li.append(a, b);
+      ui.boardList.appendChild(li);
+    });
+  }
+  function loadBoard() {
+    if (!BOARD_URL) return;
+    fetch(BOARD_URL + '/board?day=' + today()).then((r) => r.json()).then(renderBoard).catch(() => { ui.boardCount.textContent = 'The board cannot be reached right now.'; });
+  }
+  function postBoard() {
+    if (!BOARD_URL || !txMode || !signal || signal.daily !== today()) return;
+    const name = cleanName(ui.boardName.value);
+    ui.boardName.value = name;
+    if (!name) { ui.boardCount.textContent = 'Type a name to take a seat.'; return; }
+    try { localStorage.setItem('atumaa.name', name); } catch (e) { /* storage blocked */ }
+    ui.post.disabled = true;
+    fetch(BOARD_URL + '/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ day: signal.daily, name, ok: tx.ok, score }) })
+      .then((r) => r.json())
+      .then((d) => { if (d.error) ui.boardCount.textContent = 'Not accepted: ' + d.error + '.'; else { renderBoard(d); ui.post.textContent = 'Posted'; } })
+      .catch(() => { ui.boardCount.textContent = 'The board cannot be reached right now.'; ui.post.disabled = false; });
+  }
+
   let overLine = '';
   // A signal run is a transmission: thirteen signals, identical for everyone who opens it,
   // with no time meter, prizes or interval acts, so two results can be compared fairly.
@@ -848,7 +913,12 @@
     ui.title.hidden = m !== 'title';
     ui.compose.hidden = m !== 'compose';
     ui.endless.hidden = true;
-    if (m === 'title') { const fresh = !played; ui.daily.hidden = fresh; ui.signalBtn.hidden = fresh; }
+    if (m === 'title') {
+      const fresh = !played, run = liveStreak();
+      ui.daily.hidden = fresh;
+      ui.signalBtn.hidden = fresh;
+      ui.daily.textContent = "Today's transmission" + (run ? ' · streak ' + days(run) : '');
+    }
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
     ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose' || m === 'ending';
@@ -1328,6 +1398,18 @@
       ui.share.textContent = them ? 'Send it back' : sig.mine ? 'Send this signal' : 'Challenge a friend';
     }
     ui.again.textContent = sig ? 'Rematch' : 'Try again';
+    // finishing today's transmission keeps the daily streak going and opens the board
+    const isToday = !!(sig && sig.daily === today());
+    ui.streak.hidden = !isToday;
+    if (isToday) ui.streak.textContent = 'Daily streak: ' + days(bumpStreak());
+    ui.board.hidden = !(isToday && BOARD_URL);
+    if (isToday && BOARD_URL) {
+      ui.post.disabled = false;
+      ui.post.textContent = 'Take a seat';
+      ui.boardList.textContent = '';
+      ui.boardCount.textContent = '';
+      loadBoard();
+    }
     sfx.over();
     buzz(HAPTIC.over);
   }
@@ -2310,6 +2392,7 @@
   }, { passive: false });
 
   window.addEventListener('keydown', (e) => {
+    if (e.target && e.target.tagName === 'INPUT') { if (e.key === 'Enter') postBoard(); return; } // typing a name is not playing
     if (e.repeat) { if (['ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault(); return; }
     const k = e.key;
     if (mode === 'compose') {
@@ -2347,6 +2430,8 @@
   ui.haptic2.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.daily.addEventListener('click', playDaily);
   ui.daily2.addEventListener('click', playDaily);
+  ui.post.addEventListener('click', postBoard);
+  try { ui.boardName.value = cleanName(localStorage.getItem('atumaa.name')); } catch (e) { /* storage blocked */ }
   ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(8); });
   syncToggles();
   for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily', 'btn-daily2']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
