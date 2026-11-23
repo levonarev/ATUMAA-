@@ -48,6 +48,14 @@ short act. A signal you fail to touch simply fades, with no penalty. The three a
   it crosses the line for points and time back; an exact tap adds a shield. Tapping a true beat
   ends the act with nothing. From seat IV the wrong beat is subtler.
 
+## Send a signal
+
+From the title or end screen a player can tap six times in any rhythm. The five gaps between
+the taps become a five-character code that seeds the run, sets the rhythm the signals fall in,
+and draws the signal's own mark. After playing it, the player shares a link
+(`?s=<code>&p=<score>`); whoever opens it gets the same run and a mark to beat. Nothing is
+sent to a server: the whole signal lives in the link.
+
 ## Feel and sound
 
 - **Haptics:** every event has its own light vibration: touch, tap, swipe, each kind of hit, a

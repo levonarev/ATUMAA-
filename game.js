@@ -47,6 +47,12 @@
     finalScore: $('final-score'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
     sound: $('btn-sound'),
+    // send a signal
+    compose: $('screen-compose'), start: $('btn-start'), premise: $('premise'),
+    glyphTitle: $('glyph-title'), glyphCompose: $('glyph-compose'), glyphOver: $('glyph-over'),
+    tapPad: $('tap-pad'), composeHint: $('compose-hint'), composeCount: $('compose-count'),
+    playSignal: $('btn-play-signal'), redo: $('btn-redo'),
+    signalResult: $('signal-result'), share: $('btn-share'), shareNote: $('share-note'), free: $('btn-free'),
   };
 
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -55,6 +61,18 @@
   const ease = (k) => 1 - Math.pow(1 - clamp(k, 0, 1), 3);
   const seatOf = (lv) => Math.min(lv, 7);
   const world = () => WORLDS[seatOf(level) - 1];
+
+  // Everything that decides what falls and when draws from rng, so a shared signal
+  // replays the same run for whoever opens it. Effects keep using Math.random.
+  let rng = Math.random;
+  function mulberry32(a) {
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
 
   /* ---------- Layout ---------- */
   let W = 0, H = 0, U = 1, DPR = 1;
@@ -274,7 +292,7 @@
   };
 
   /* ---------- State ---------- */
-  let mode = 'title'; // title | intro | play | pause | interlude | over
+  let mode = 'title'; // title | compose | intro | play | pause | interlude | over
   let time = 0, level = 1, score = 0, light = 1, introT = 0, bannerT = 0;
   let combo = 0, bestCombo = 0, cleared = 0, goal = 13, totalCleared = 0, spawned = 0;
   let spawnTimer = 0, interlude = 0, shake = 0, lastVoid = false;
@@ -311,8 +329,151 @@
   let dragY = 0, holding = false, holdT = 0, lastTap = 0, keyHold = false;
   let lastWheelT = 0, lastWheelMag = 0;
 
+  /* ---------- Send a signal ---------- */
+  // A player taps six times. The five gaps between the taps are the signal: they travel in the
+  // link as five hex digits, seed the run, set the rhythm the signals fall in, and draw its mark.
+  const SIG_TAPS = 6, SIG_MIN = 100, SIG_SPAN = 16; // gaps from 0.1 s to 1.6 s, on a log scale
+  const SIG_NOTES = [392.0, 440.0, 523.25, 587.33, 659.25, 783.99];
+  let signal = null;  // the signal being played: {code,q,iv,norm,mark,mine}
+  let sigStep = 0;
+  let taps = [], draft = null, composeFrom = 'title';
+
+  function makeSignal(code, mark, mine) {
+    if (!/^[0-9a-f]{5}$/.test(code)) return null;
+    const q = code.split('').map((c) => parseInt(c, 16));
+    const iv = q.map((v) => (SIG_MIN * Math.pow(SIG_SPAN, v / 15)) / 1000); // seconds
+    const top = Math.max(...iv);
+    return { code, q, iv, norm: iv.map((v) => v / top), mark, mine };
+  }
+
+  function codeFromTaps(times) {
+    let code = '';
+    for (let i = 1; i < times.length; i++) {
+      const d = clamp(times[i] - times[i - 1], SIG_MIN, SIG_MIN * SIG_SPAN);
+      code += Math.round((15 * Math.log(d / SIG_MIN)) / Math.log(SIG_SPAN)).toString(16);
+    }
+    return code;
+  }
+
+  function signalFromUrl() {
+    try {
+      const p = new URLSearchParams(location.search);
+      const m = parseInt(p.get('p') || '', 36);
+      return makeSignal((p.get('s') || '').toLowerCase(), Number.isFinite(m) && m > 0 ? m : null, false);
+    } catch (e) { return null; }
+  }
+
+  function signalUrl(sig, mark) {
+    return location.origin + location.pathname + '?s=' + sig.code + (mark > 0 ? '&p=' + Math.round(mark).toString(36) : '');
+  }
+
+  // every signal has its own mark: six points set around a ring by its rhythm
+  function drawGlyph(cv, sig) {
+    const g = cv.getContext('2d'), s = cv.width, c = s / 2, R = s * 0.38;
+    g.clearRect(0, 0, s, s);
+    g.lineWidth = s * 0.012;
+    g.strokeStyle = 'rgba(255,255,255,0.2)';
+    g.beginPath();
+    g.arc(c, c, R, 0, TAU);
+    g.stroke();
+    if (!sig) return;
+    const hue = (parseInt(sig.code, 16) * 137) % 360;
+    const total = sig.iv.reduce((a, b) => a + b, 0) * 1.15; // the ring never quite closes
+    const pts = [];
+    let acc = 0;
+    for (let i = 0; i < SIG_TAPS; i++) {
+      const a = -Math.PI / 2 + (acc / total) * TAU;
+      const rr = R * (i ? 0.55 + 0.45 * sig.norm[i - 1] : 1);
+      pts.push([c + Math.cos(a) * rr, c + Math.sin(a) * rr]);
+      if (i < sig.iv.length) acc += sig.iv[i];
+    }
+    g.lineJoin = 'round';
+    g.lineWidth = s * 0.024;
+    g.strokeStyle = `hsl(${hue},85%,72%)`;
+    g.fillStyle = `hsla(${hue},85%,60%,0.18)`;
+    g.beginPath();
+    pts.forEach((p, i) => { if (i) g.lineTo(p[0], p[1]); else g.moveTo(p[0], p[1]); });
+    g.closePath();
+    g.fill();
+    g.stroke();
+    pts.forEach((p, i) => {
+      g.fillStyle = i ? '#fffbe6' : 'rgb(230,196,106)';
+      g.beginPath();
+      g.arc(p[0], p[1], s * (i ? 0.03 : 0.045), 0, TAU);
+      g.fill();
+    });
+  }
+
+  // the signal as sound: its own six notes in its own rhythm
+  function playMotif(sig) {
+    let t = 0;
+    for (let i = 0; i < SIG_TAPS; i++) {
+      tone(SIG_NOTES[i ? (sig.q[i - 1] + i) % SIG_NOTES.length : 0], 0.18, 'triangle', 0.08, t);
+      if (i < sig.iv.length) t += sig.iv[i];
+    }
+  }
+
+  function renderCompose() {
+    drawGlyph(ui.glyphCompose, draft);
+    ui.composeCount.textContent = draft ? 'This is your signal' : taps.length + ' / ' + SIG_TAPS;
+    ui.composeHint.textContent = draft
+      ? 'Play it first. Your score becomes the mark your friends have to beat.'
+      : 'Tap the ring six times, in any rhythm. That rhythm is your signal.';
+    ui.playSignal.hidden = !draft;
+    ui.redo.hidden = !draft && taps.length === 0;
+  }
+
+  function openCompose() {
+    initAudio();
+    initHaptics();
+    composeFrom = mode === 'over' ? 'over' : 'title';
+    taps = [];
+    draft = null;
+    renderCompose();
+    setMode('compose');
+  }
+
+  function composeTap() {
+    if (mode !== 'compose' || draft) return;
+    const now = performance.now();
+    if (taps.length && now - taps[taps.length - 1] > 2500) taps = []; // a long pause starts over
+    taps.push(now);
+    tone(SIG_NOTES[(taps.length - 1) % SIG_NOTES.length], 0.14, 'triangle', 0.08);
+    buzz(HAPTIC.tap);
+    if (taps.length === SIG_TAPS) {
+      draft = makeSignal(codeFromTaps(taps), null, true);
+      buzz(HAPTIC.seat);
+      const made = draft;
+      setTimeout(() => { if (mode === 'compose' && draft === made) playMotif(made); }, 600);
+    }
+    renderCompose();
+  }
+
+  function playDraft() {
+    if (!draft) return;
+    signal = draft;
+    if (best > 0) startGame(); else startIntro();
+  }
+
+  function shareSignal() {
+    if (!signal) return;
+    const url = signalUrl(signal, score);
+    const text = signal.mine ? 'I sent you a signal. Answer it.' : 'I answered this signal with ' + score.toLocaleString() + '. Your turn.';
+    const note = (msg) => { ui.shareNote.textContent = msg; };
+    if (navigator.share) {
+      navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch(() => { /* closed without sharing */ });
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text + ' ' + url).then(() => note('Link copied. Paste it to a friend.'), () => note(url));
+    } else note(url);
+  }
+
   function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (level - 1))) * H; }
-  function spawnGap() { return Math.max(0.44, 1.18 - 0.075 * level) * rand(0.82, 1.2); }
+  function spawnGap() {
+    const base = Math.max(0.44, 1.18 - 0.075 * level);
+    // a shared signal falls in the rhythm it was tapped in
+    if (signal) return base * (0.78 + 0.44 * signal.norm[sigStep++ % signal.norm.length]);
+    return base * rand(0.82, 1.2);
+  }
   function multiplier() { return Math.min(6, 1 + Math.floor(combo / 8)); }
   function targetX(t) { return field.cx + Math.sin(t.ph + t.y * 0.008) * field.path * 0.42; }
   function revealY() { return lerp(field.top, field.heartY, 0.42); }
@@ -342,7 +503,7 @@
     cleared = 0;
     seatStats.hit = seatStats.wrong = seatStats.missed = 0;
     bonusDone = false;
-    bonusAt = Math.floor((10 + 3 * n) * rand(0.35, 0.65));
+    bonusAt = Math.floor((10 + 3 * n) * (0.35 + rng() * 0.3));
     goal = 10 + 3 * level;
     spawnTimer = 1.2;
     ui.grove.textContent = seatLabel();
@@ -358,6 +519,8 @@
     bonus = null; act = null; shield = 0; memories = 0;
     lastVoid = false;
     ptr = null; dragY = 0; holding = false; keyHold = false;
+    rng = signal ? mulberry32(parseInt(signal.code, 16) + 1) : Math.random;
+    sigStep = 0;
   }
 
   function startIntro() {
@@ -379,18 +542,19 @@
     mode = m;
     const playing = m === 'play' || m === 'interlude';
     ui.title.hidden = m !== 'title';
+    ui.compose.hidden = m !== 'compose';
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
-    ui.hud.hidden = m === 'title' || m === 'intro';
+    ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose';
     ui.skip.hidden = m !== 'intro';
     if (!playing) ui.hint.hidden = true;
-    if (m === 'intro' || m === 'over') { ui.banner.hidden = true; bannerT = 0; }
+    if (m === 'intro' || m === 'over' || m === 'compose') { ui.banner.hidden = true; bannerT = 0; }
   }
 
   /* ---------- Spawning ---------- */
   function spawnTarget() {
     spawned++;
-    const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rand(0, TAU), wob: 0 };
+    const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rng() * TAU, wob: 0 };
     if (!bonusDone && cleared + targets.length >= bonusAt) {
       bonusDone = true;
       t.bonus = true;
@@ -400,19 +564,19 @@
       return;
     }
     const signs = level >= 4 ? 4 : level >= 2 ? 3 : spawned > 4 ? 2 : 1;
-    if (level >= 3 && !lastVoid && Math.random() < Math.min(0.24, 0.12 + 0.02 * level)) {
+    if (level >= 3 && !lastVoid && rng() < Math.min(0.24, 0.12 + 0.02 * level)) {
       t.shade = true;
     } else {
       let len = 1;
-      if (level >= 5 && Math.random() < Math.min(0.5, 0.25 + 0.05 * (level - 5))) len = level >= 7 && Math.random() < 0.4 ? 3 : 2;
-      for (let i = 0; i < len; i++) t.seq.push((Math.random() * signs) | 0);
+      if (level >= 5 && rng() < Math.min(0.5, 0.25 + 0.05 * (level - 5))) len = level >= 7 && rng() < 0.4 ? 3 : 2;
+      for (let i = 0; i < len; i++) t.seq.push((rng() * signs) | 0);
       // meet each new thing early in the seat that introduces it
       const first = cleared + targets.length === 0;
       if (first && level === 2) { t.seq = [2]; len = 1; }
       if (first && level === 4) { t.seq = [3]; len = 1; }
       if (first && level === 5) { t.seq = [0, 1]; len = 2; }
-      if (len === 1 && t.seq[0] < 2 && level >= 6 && (first && level === 6 || Math.random() < Math.min(0.45, 0.28 + 0.03 * (level - 6)))) t.mirror = true;
-      if (level >= 7 && !t.mirror && (first && level === 7 || Math.random() < Math.min(0.5, 0.3 + 0.04 * (level - 7)))) t.cloak = true;
+      if (len === 1 && t.seq[0] < 2 && level >= 6 && (first && level === 6 || rng() < Math.min(0.45, 0.28 + 0.03 * (level - 6)))) t.mirror = true;
+      if (level >= 7 && !t.mirror && (first && level === 7 || rng() < Math.min(0.5, 0.3 + 0.04 * (level - 7)))) t.cloak = true;
     }
     if (level === 3 && cleared + targets.length === 1) { t.shade = true; t.seq = []; t.mirror = t.cloak = false; }
     lastVoid = t.shade;
@@ -506,7 +670,7 @@
     const x0 = field.cx - (cols * tw + (cols - 1) * gap) / 2;
     const y0 = Math.max(field.top + 96 * U, H * 0.5 - (rows * th + (rows - 1) * gap) / 2);
     const kinds = ['skip', 'time', 'score', 'shield', 'empty', 'empty'];
-    for (let i = kinds.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
+    for (let i = kinds.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
     bonus = { tiles: kinds.map((prize, i) => ({ prize, open: 0, x: x0 + (i % cols) * (tw + gap), y: y0 + Math.floor(i / cols) * (th + gap), w: tw, h: th })), picked: -1, t: 0, pickT: 0, applied: false };
     ptr = null; dragY = 0; endHold();
     setMode('bonus');
@@ -568,7 +732,7 @@
       act = { type, t: -0.6, beat: Math.max(0.5, 0.76 - 0.02 * level), n: 8, res: [], tick: 0, end: -1, note: '', noteT: -9 };
     } else {
       const spacing = 200 * U, period = Math.max(0.52, 0.82 - 0.03 * level);
-      act = { type, t: 0, spacing, speed: spacing / period, odd: 2 + ((Math.random() * 5) | 0), n: 9, blip: -1, end: -1, subtle: level >= 4 };
+      act = { type, t: 0, spacing, speed: spacing / period, odd: 2 + ((rng() * 5) | 0), n: 9, blip: -1, end: -1, subtle: level >= 4 };
     }
     setMode('act');
     [659.25, 987.77, 1318.5].forEach((f, i) => tone(f, 0.4, 'sine', 0.07, i * 0.09));
@@ -692,7 +856,7 @@
     const bonus = 200 * level + (perfect ? 150 * level : 0);
     light = Math.min(1, light + 0.25);
     score += bonus;
-    for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
+    for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : t.bonus ? '230,196,106' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
     targets = [];
     rings.push({ x: field.cx, y: field.heartY, r: 20, max: Math.max(W, H) * 1.1, life: 1.6, rgb: world().accent });
     scrollKick = 2600 * U;
@@ -718,6 +882,18 @@
     const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Interval acts', memories]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
     ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
+    // a signal run ends with its mark, how it went against the sender, and a way to send it on
+    const sig = signal;
+    ui.glyphOver.hidden = ui.signalResult.hidden = ui.share.hidden = ui.free.hidden = !sig;
+    ui.shareNote.textContent = '';
+    if (sig) {
+      drawGlyph(ui.glyphOver, sig);
+      ui.signalResult.textContent = sig.mine ? 'Your signal is ready. Send it and see who can answer it.'
+        : !sig.mark ? 'You answered the signal.'
+        : score > sig.mark ? 'You answered it. Their mark was ' + sig.mark.toLocaleString() + '.'
+        : 'The signal holds. Their mark is ' + sig.mark.toLocaleString() + '.';
+      ui.share.textContent = sig.mine ? 'Send this signal' : 'Pass it on';
+    }
     sfx.over();
     buzz(HAPTIC.over);
   }
@@ -1460,7 +1636,7 @@
     ctx.drawImage(scenery, 0, off - H, W, H);
 
     if (mode === 'intro') { drawIntro(); return; }
-    if (mode === 'title') return;
+    if (mode === 'title' || mode === 'compose') return;
 
     const hx = field.cx, hy = field.heartY;
     const f = front();
@@ -1559,7 +1735,7 @@
       introT += dt;
       scrollY += H * 0.14 * dt;
       if (introT >= INTRO_TOTAL) startGame();
-    } else if (mode === 'title' || mode === 'over') { time += dt; scrollY += H * 0.06 * dt; }
+    } else if (mode === 'title' || mode === 'over' || mode === 'compose') { time += dt; scrollY += H * 0.06 * dt; }
     if (mode === 'over' && overT < 1) {
       // the score counts up with a ticking tally once the falling tones have played
       overT = Math.min(1, overT + dt / 1.3);
@@ -1654,6 +1830,12 @@
   window.addEventListener('keydown', (e) => {
     if (e.repeat) { if (['ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault(); return; }
     const k = e.key;
+    if (mode === 'compose') {
+      // Space taps the rhythm until the signal is made; after that it is free to press the buttons
+      if (k === ' ' && !draft) { e.preventDefault(); composeTap(); }
+      else if (k === 'Escape') setMode(composeFrom);
+      return;
+    }
     if (mode === 'title') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startIntro(); } return; }
     if (mode === 'over') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
@@ -1679,11 +1861,31 @@
   ui.sound.addEventListener('click', toggleSound);
   ui.haptic.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.haptic.classList.toggle('off', !hapticsOn);
-  for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
+  for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
+
+  // send a signal
+  $('btn-signal').addEventListener('click', openCompose);
+  $('btn-compose').addEventListener('click', openCompose);
+  $('btn-back').addEventListener('click', () => setMode(composeFrom));
+  ui.tapPad.addEventListener('pointerdown', (e) => { e.preventDefault(); composeTap(); });
+  ui.tapPad.addEventListener('click', (e) => e.preventDefault());
+  ui.playSignal.addEventListener('click', playDraft);
+  ui.redo.addEventListener('click', () => { taps = []; draft = null; renderCompose(); });
+  ui.share.addEventListener('click', shareSignal);
+  ui.free.addEventListener('click', () => { signal = null; startGame(); });
+  ui.glyphTitle.addEventListener('click', () => { if (signal) { initAudio(); playMotif(signal); } });
   window.addEventListener('resize', resize);
 
   /* ---------- Boot ---------- */
   if (best > 0) ui.bestTitle.textContent = 'Best ' + best.toLocaleString();
+  // opened from a friend's link: their signal is waiting on the title screen
+  signal = signalFromUrl();
+  if (signal) {
+    ui.glyphTitle.hidden = false;
+    drawGlyph(ui.glyphTitle, signal);
+    ui.premise.textContent = 'A signal is waiting for you.' + (signal.mark ? ' The mark to beat is ' + signal.mark.toLocaleString() + '.' : '') + ' Answer it.';
+    ui.start.textContent = 'Answer it';
+  }
   resize();
   setMode('title');
   requestAnimationFrame(frame);

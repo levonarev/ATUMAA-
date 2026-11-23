@@ -43,10 +43,26 @@
   <div class="panel">
     <h1>ATUMAA</h1>
     <p class="tagline">The Seventh Seat</p>
-    <p class="premise">November 2026. Asteroid 1998 KY26 is accelerating. Six people heard its signal. There are seven seats. Answer it.</p>
+    <canvas id="glyph-title" class="glyph" width="192" height="192" title="Hear the signal" hidden></canvas>
+    <p id="premise" class="premise">November 2026. Asteroid 1998 KY26 is accelerating. Six people heard its signal. There are seven seats. Answer it.</p>
     <button id="btn-start" class="primary" type="button">Begin</button>
+    <button id="btn-signal" class="secondary" type="button">Send a signal</button>
     <p class="controls">A ten-second briefing shows every move. You play it the way you scroll reels: swipe up, swipe down, double-tap, hold. Keyboard: ↑ ↓ Space, hold Shift.</p>
     <p id="best-title" class="best"></p>
+  </div>
+</section>
+
+<section id="screen-compose" class="screen" hidden>
+  <div class="panel small">
+    <h2>Send a signal</h2>
+    <button id="tap-pad" type="button" aria-label="Tap your rhythm here">
+      <canvas id="glyph-compose" class="glyph" width="300" height="300"></canvas>
+    </button>
+    <p id="compose-count" class="best">0 / 6</p>
+    <p id="compose-hint" class="controls">Tap the ring six times, in any rhythm. That rhythm is your signal.</p>
+    <button id="btn-play-signal" class="primary" type="button" hidden>Play it</button>
+    <button id="btn-redo" class="secondary" type="button" hidden>Tap it again</button>
+    <button id="btn-back" class="secondary" type="button">Back</button>
   </div>
 </section>
 
@@ -64,7 +80,13 @@
     <p id="final-detail" class="controls"></p>
     <dl id="final-stats"></dl>
     <p id="best-over" class="best"></p>
+    <canvas id="glyph-over" class="glyph" width="192" height="192" hidden></canvas>
+    <p id="signal-result" hidden></p>
+    <button id="btn-share" class="primary" type="button" hidden>Send this signal</button>
+    <p id="share-note" class="controls"></p>
     <button id="btn-again" class="primary" type="button">Try again</button>
+    <button id="btn-compose" class="secondary" type="button">Send a signal of your own</button>
+    <button id="btn-free" class="secondary" type="button" hidden>Free play</button>
   </div>
 </section>
 
