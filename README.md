@@ -17,7 +17,7 @@ The whole world scrolls with every swipe, like a feed.
 
 The meter is time: a full bar is the 5 minutes 21 seconds each of the six is missing.
 
-A ten-second opening gives the premise from the trailer (November 2026, asteroid 1998 KY26 is
+Play starts at once. A ten-second briefing, reached from How to play on the title screen, gives the premise from the trailer (November 2026, asteroid 1998 KY26 is
 accelerating, it is sending a signal) and shows every gesture. Then seven seats, each a place
 from the trailer that adds one complication on top of the last:
 
