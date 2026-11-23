@@ -234,3 +234,24 @@ button.secondary:hover { filter: brightness(1.3); }
 #signal-result { margin: 0 0 14px; font-size: 14.5px; line-height: 1.45; text-wrap: balance; }
 #share-note { margin: 8px 0 12px; min-height: 0; -webkit-user-select: text; user-select: text; word-break: break-all; }
 #share-note:empty { margin: 0 0 12px; }
+
+/* ---------- Feedback pass: touch targets, portrait notice ---------- */
+.hud-buttons button { width: 44px; height: 44px; font-size: 17px; }
+#hud { height: 64px; }
+@media (max-width: 480px) {
+  /* phones keep one large pause button; sound and vibration move to the pause screen */
+  #btn-sound, #btn-haptic { display: none; }
+  .hud-buttons button { width: 44px; height: 44px; font-size: 17px; }
+}
+#screen-over h2 { font-size: 19px; letter-spacing: 0.06em; text-wrap: balance; }
+.screen { align-items: flex-start; }
+.screen .panel { margin: auto; }
+#rotate { display: none; }
+@media (orientation: landscape) and (max-height: 520px) and (hover: none) {
+  #rotate {
+    display: flex; position: fixed; inset: 0; z-index: 20;
+    align-items: center; justify-content: center; padding: 24px;
+    background: #05070d; color: var(--gold);
+    font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; text-align: center;
+  }
+}

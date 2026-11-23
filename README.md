@@ -56,6 +56,23 @@ and draws the signal's own mark. After playing it, the player shares a link
 (`?s=<code>&p=<score>`); whoever opens it gets the same run and a mark to beat. Nothing is
 sent to a server: the whole signal lives in the link.
 
+## Today's signal and sharing
+
+- **Today's signal:** one run a day, the same for everyone, made by hashing the date into a
+  signal code. The best score for the day is kept on the device. `atumaa.com/?daily` opens it.
+- **Share this run:** every run ends with a share button. Where the phone supports it, it
+  shares a 9:16 card (seat reached, score, clean percentage, the signal's mark) with a result
+  line such as `ATUMAA IV · 96% clean · 12,340 · 3 signals short of The Corridor`; otherwise it
+  shares or copies the text and link.
+- **Link previews:** `og.png`, `manifest.webmanifest` and the app icons give shared links a
+  proper card and let the game be added to a home screen.
+
+## Difficulty
+
+Time now runs down by itself (about 90 seconds from full in Seat I, faster later). Every answer
+gives a little back and each cleared seat gives a quarter. A missed signal costs less in the
+first seats than later. A Gap appears once in Seat I so it is met early.
+
 ## Feel and sound
 
 - **Haptics:** every event has its own light vibration: touch, tap, swipe, each kind of hit, a
@@ -81,4 +98,5 @@ python3 -m http.server 8000
 - `index.html` — page, HUD and menus
 - `style.css` — styling
 - `game.js` — the whole game (canvas rendering, gestures, audio)
+- `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png`, `og.png` — install and link-preview assets
 - `CNAME` — custom domain for GitHub Pages
