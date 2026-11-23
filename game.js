@@ -21,6 +21,10 @@
     { name: 'The Corridor', adds: 'Bound signals: answer each in turn', bg: '#04070a', glow: '30,70,90', speck: '255,200,140', side: [86, 62, 40], shape: 'screens', accent: '255,190,120' },
     { name: 'Twin Suns', adds: 'Mirrored signals: swipe the opposite way', bg: '#0a0612', glow: '110,60,150', speck: '255,180,230', side: [44, 22, 60], shape: 'dunes', accent: '255,140,170' },
     { name: 'The Seventh Seat', adds: 'Cloaked signals: revealed at the last moment', bg: '#050505', glow: '70,60,40', speck: '255,220,150', side: [24, 24, 26], shape: 'pillars', accent: '255,214,130' },
+    // beyond the seventh seat the signals arrive in lanes, and the move has to be made in the right one
+    { name: 'The Field', adds: "Aim: two lanes. Make your move in the signal's own lane", bg: '#03090b', glow: '20,90,100', speck: '120,255,240', side: [14, 40, 44], shape: 'shards', accent: '90,240,230' },
+    { name: 'The Shore', adds: 'Three lanes, and the old tricks return', bg: '#0b0907', glow: '110,80,50', speck: '255,220,180', side: [40, 30, 24], shape: 'dunes', accent: '255,200,140' },
+    { name: 'The Answer', adds: 'Everything at once, sometimes two together', bg: '#060606', glow: '80,70,40', speck: '255,230,170', side: [30, 28, 22], shape: 'pillars', accent: '255,220,130' },
   ];
   const INTRO = [
     { el: 0, dur: 2.1, touch: 'Swipe up', desk: 'Swipe up  ·  ↑' },
@@ -31,7 +35,7 @@
   ];
   const INTRO_TOTAL = INTRO.reduce((s, b) => s + b.dur, 0); // 10 seconds
 
-  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
   const TAU = Math.PI * 2;
   const FONT = '"Avenir Next", "Segoe UI", system-ui, sans-serif';
   const SWIPE_PX = 24, TAP_PX = 12, TAP_MS = 300, DOUBLE_MS = 420, HOLD_S = 0.38;
@@ -62,7 +66,8 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, k) => a + (b - a) * k;
   const ease = (k) => 1 - Math.pow(1 - clamp(k, 0, 1), 3);
-  const seatOf = (lv) => Math.min(lv, 7);
+  const seatOf = (lv) => Math.min(lv, WORLDS.length);
+  const LAST = WORLDS.length; // beyond this the last seat repeats in faster cycles
   const world = () => WORLDS[seatOf(level) - 1];
 
   // Everything that decides what falls and when draws from rng, so a shared signal
@@ -237,6 +242,56 @@
       }
       b.fillStyle = 'rgba(255,200,230,0.35)';
       b.fillRect(0, hy, W, 1.5);
+    } else if (idx === 7) { // the field: rows of dark spheres with one ember each, running to the horizon
+      for (let r = 0; r < 10; r++) {
+        const k = Math.pow(r / 9, 1.5), y = top + H * 0.05 + k * H * 0.9, sz = (3 + k * 19) * U;
+        for (let c = -5; c <= 5; c++) {
+          const x = cx + c * sz * 3.3 + (r % 2) * sz * 1.6;
+          if (Math.abs(x - cx) < field.path * 1.05) continue;
+          b.fillStyle = `rgba(6,14,16,${0.5 + k * 0.45})`;
+          b.strokeStyle = `rgba(90,240,230,${0.18 + k * 0.4})`;
+          b.lineWidth = 1.2;
+          b.beginPath(); b.arc(x, y, sz, 0, TAU); b.fill(); b.stroke();
+          b.fillStyle = `rgba(255,150,70,${0.4 + k * 0.5})`;
+          b.beginPath(); b.arc(x + sz * 0.3, y - sz * 0.1, sz * 0.2, 0, TAU); b.fill();
+        }
+      }
+    } else if (idx === 8) { // the shore: a hooded figure against a low sun
+      const hy = top + H * 0.2;
+      const sun = b.createRadialGradient(cx + 60 * U, hy, 0, cx + 60 * U, hy, 150 * U);
+      sun.addColorStop(0, 'rgba(255,226,170,0.95)'); sun.addColorStop(0.12, 'rgba(255,200,130,0.5)'); sun.addColorStop(1, 'rgba(255,180,110,0)');
+      b.fillStyle = sun;
+      b.fillRect(0, top, W, hy - top + 4);
+      b.fillStyle = 'rgba(8,7,6,0.96)';
+      for (const [dx, hh, ww] of [[-150, 44, 60], [-96, 26, 40], [150, 54, 74], [108, 30, 46]]) {
+        b.beginPath(); b.moveTo(cx + (dx - ww / 2) * U, hy); b.lineTo(cx + dx * U, hy - hh * U); b.lineTo(cx + (dx + ww / 2) * U, hy); b.closePath(); b.fill();
+      }
+      b.beginPath(); // the figure
+      b.moveTo(cx - 20 * U, hy + 4 * U);
+      b.quadraticCurveTo(cx - 17 * U, hy - 66 * U, cx, hy - 92 * U);
+      b.quadraticCurveTo(cx + 17 * U, hy - 66 * U, cx + 20 * U, hy + 4 * U);
+      b.closePath(); b.fill();
+      for (let i = 0; i < 34; i++) {
+        const y = hy + 6 + Math.pow(i / 34, 1.5) * (H - hy), ww = rand(0.15, 0.7) * W;
+        b.fillStyle = `rgba(255,200,140,${rand(0.04, 0.13)})`;
+        b.fillRect(cx - ww / 2 + rand(-30, 30), y, ww, (1.5 + i * 0.16) * U);
+      }
+    } else if (idx === 9) { // the answer: the gold ring alone, open
+      const r = R * 0.34, y = top + r * 0.75;
+      const g = b.createRadialGradient(cx, y, r * 0.2, cx, y, r * 1.9);
+      g.addColorStop(0, 'rgba(255,214,130,0.3)'); g.addColorStop(1, 'rgba(255,214,130,0)');
+      b.fillStyle = g;
+      b.fillRect(0, top - 40, W, r * 4);
+      b.strokeStyle = 'rgba(255,214,130,0.42)';
+      b.lineWidth = 3 * U;
+      b.beginPath(); b.arc(cx, y, r, 0, TAU); b.stroke();
+      b.lineWidth = 1.5 * U;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * TAU, r2 = r * (i % 6 === 0 ? 1.22 : 1.1);
+        b.beginPath(); b.moveTo(cx + Math.cos(a) * r * 1.04, y + Math.sin(a) * r * 1.04); b.lineTo(cx + Math.cos(a) * r2, y + Math.sin(a) * r2); b.stroke();
+      }
+      b.fillStyle = 'rgba(255,236,190,0.95)';
+      b.beginPath(); b.arc(cx + r * 0.72, y - r * 0.72, 5 * U, 0, TAU); b.fill();
     } else { // the seventh seat: seven stone seats in an arc, one of them lit
       for (let i = 0; i < 9; i++) {
         let x = rand(0, W), y = top;
@@ -421,7 +476,7 @@
     letGo: 15, streak: [15, 40, 15, 40, 15], seat: [20, 60, 20, 60, 36], over: [90, 70, 170],
   };
 
-  const ROOTS = [110, 98, 82.41, 73.42, 110, 92.5, 65.41];
+  const ROOTS = [110, 98, 82.41, 73.42, 110, 92.5, 65.41, 87.31, 98, 73.42];
   let musicNext = 0, musicStep = 0;
   function music() {
     if (!ac || muted) { musicNext = 0; return; }
@@ -495,7 +550,7 @@
   let particles = []; // {x,y,vx,vy,life,max,rgb,size}
   let rings = [];     // {x,y,r,max,life,rgb}
   let texts = [];     // {x,y,text,life,rgb,size}
-  const learned = { 0: 0, 1: 0, 2: 0, 3: 0, void: 0, mirror: 0, cloak: 0, bound: 0 };
+  const learned = { 0: 0, 1: 0, 2: 0, 3: 0, void: 0, mirror: 0, cloak: 0, bound: 0, aim: 0 };
 
   // input
   let ptr = null;     // {id,x0,y0,t0,done}
@@ -767,7 +822,7 @@
     for (let i = 0; i < 7 && !txMode; i++) {
       g.beginPath();
       g.arc(cx + (i - 3) * 92, 830, 22, 0, TAU);
-      if (i < seatOf(level)) { g.fillStyle = gold; g.fill(); } else { g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 4; g.stroke(); }
+      if (i < Math.min(7, seatOf(level))) { g.fillStyle = gold; g.fill(); } else { g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 4; g.stroke(); }
     }
     g.fillStyle = '#fff';
     g.font = `700 170px ${FONT}`;
@@ -824,16 +879,35 @@
       .catch((err) => { if (!err || err.name !== 'AbortError') copy(); }); // closing the sheet is not a failure
   }
 
-  function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (level - 1))) * H; }
+  // From Seat VIII the signals come down separate lanes and a move only counts in the lane it
+  // is made in. Aiming is hard, so speed and the mix of signals drop back before climbing again.
+  let aimLane = 0, lastLane = 9;
+  function lanes() { return txMode || level < 8 ? 1 : level === 8 ? 2 : 3; }
+  function laneGap() { return field.path * 0.64; }
+  function speedLevel() { return level < 8 ? level : level - 6; }
+  function ruleLevel() { return level < 8 ? level : level === 8 ? 4 : level === 9 ? 6 : level - 3; }
+  function laneAt(x) {
+    if (lanes() === 2) return x < field.cx ? -1 : 1;
+    const g = laneGap();
+    return x < field.cx - g / 2 ? -1 : x > field.cx + g / 2 ? 1 : 0;
+  }
+  function frontIn(lane) {
+    let f = null;
+    for (const t of targets) if (t.lane === lane && t.y > field.top + 6 && (!f || t.y > f.y)) f = t;
+    return f;
+  }
+  // the signal a move would land on right now
+  function aimed() { return lanes() > 1 ? frontIn(aimLane) : front(); }
+  function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (speedLevel() - 1))) * H; }
   function spawnGap() {
     if (guided && level === 1 && spawned <= 4) return 2.3; // one at a time while the gamble is being learned
-    const base = Math.max(0.44, 1.18 - 0.075 * level);
+    const base = Math.max(0.44, 1.18 - 0.075 * speedLevel());
     // a shared signal falls in the rhythm it was tapped in
     if (signal) return base * (0.78 + 0.44 * signal.norm[sigStep++ % signal.norm.length]);
     return base * rand(0.82, 1.2);
   }
   function multiplier() { return Math.min(6, 1 + Math.floor(combo / 8)); }
-  function targetX(t) { return field.cx + Math.sin(t.ph + t.y * 0.008) * field.path * 0.42; }
+  function targetX(t) { if (t.lane != null) return field.cx + t.lane * laneGap(); return field.cx + Math.sin(t.ph + t.y * 0.008) * field.path * 0.42; }
   function revealY() { return lerp(field.top, field.heartY, 0.42); }
   function isCloaked(t) { return t.cloak && t.y < revealY(); }
   // the gesture that answers a signal; mirrored ones want the opposite swipe
@@ -845,7 +919,7 @@
 
   function seatLabel() {
     const s = seatOf(level);
-    return 'Seat ' + ROMAN[s - 1] + (level > 7 ? ' · Cycle ' + (level - 6) : '');
+    return 'Seat ' + ROMAN[s - 1] + (level > LAST ? ' · Cycle ' + (level - LAST + 1) : '');
   }
 
   function showBanner(html, dur) {
@@ -861,12 +935,14 @@
     cleared = 0;
     seatStats.hit = seatStats.wrong = seatStats.missed = 0;
     bonusDone = false;
-    bonusAt = Math.floor((10 + 3 * n) * (0.35 + rng() * 0.3));
-    goal = 10 + 3 * level;
+    bonusAt = Math.floor((10 + 3 * Math.min(n, 7)) * (0.35 + rng() * 0.3));
+    goal = 10 + 3 * Math.min(level, 7);
+    aimLane = lanes() === 2 ? -1 : 0;
+    lastLane = 9;
     spawnTimer = 1.2;
     ui.grove.textContent = seatLabel();
     buildBackdrop();
-    showBanner(world().name + '<small>' + seatLabel() + (level <= 7 ? ' · ' + world().adds : ' · faster') + '</small>', 2.4);
+    showBanner(world().name + '<small>' + seatLabel() + (level <= LAST ? ' · ' + world().adds : ' · faster') + '</small>', 2.4);
     if (txMode) {
       goal = TX_N;
       bonusDone = true;
@@ -928,8 +1004,9 @@
   }
 
   /* ---------- Spawning ---------- */
-  function spawnTarget() {
+  function spawnTarget(avoid) {
     spawned++;
+    const rl = ruleLevel();
     const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rng() * TAU, wob: 0 };
     if (txMode) {
       if (spawned === txGap || (!lastVoid && spawned > 2 && rng() < 0.12)) t.shade = true;
@@ -946,6 +1023,13 @@
       targets.push(t);
       return;
     }
+    const n = lanes();
+    if (n > 1) {
+      const opts = n === 2 ? [-1, 1] : [-1, 0, 1];
+      let l, tries = 0;
+      do { l = opts[(rng() * opts.length) | 0]; } while (tries++ < 12 && (l === avoid || (n === 3 && l === lastLane && rng() < 0.6)));
+      t.lane = lastLane = l;
+    }
     if (!bonusDone && cleared + targets.length >= bonusAt) {
       bonusDone = true;
       t.bonus = true;
@@ -954,20 +1038,20 @@
       targets.push(t);
       return;
     }
-    const signs = level >= 4 ? 4 : level >= 2 ? 3 : spawned > 4 ? 2 : 1;
-    if (level >= 2 && !lastVoid && rng() < (level === 2 ? 0.08 : Math.min(0.24, 0.12 + 0.02 * level))) {
+    const signs = rl >= 4 ? 4 : rl >= 2 ? 3 : spawned > 4 ? 2 : 1;
+    if (rl >= 2 && !lastVoid && rng() < (rl === 2 ? 0.08 : Math.min(0.24, 0.12 + 0.02 * rl))) {
       t.shade = true;
     } else {
       let len = 1;
-      if (level >= 5 && rng() < Math.min(0.5, 0.25 + 0.05 * (level - 5))) len = level >= 7 && rng() < 0.4 ? 3 : 2;
+      if (rl >= 5 && rng() < Math.min(0.5, 0.25 + 0.05 * (rl - 5))) len = rl >= 7 && rng() < 0.4 ? 3 : 2;
       for (let i = 0; i < len; i++) t.seq.push((rng() * signs) | 0);
       // meet each new thing early in the seat that introduces it
       const first = cleared + targets.length === 0;
       if (first && level === 2) { t.seq = [2]; len = 1; }
       if (first && level === 4) { t.seq = [3]; len = 1; }
       if (first && level === 5) { t.seq = [0, 1]; len = 2; }
-      if (len === 1 && t.seq[0] < 2 && level >= 6 && (first && level === 6 || rng() < Math.min(0.45, 0.28 + 0.03 * (level - 6)))) t.mirror = true;
-      if (level >= 7 && !t.mirror && (first && level === 7 || rng() < Math.min(0.5, 0.3 + 0.04 * (level - 7)))) t.cloak = true;
+      if (len === 1 && t.seq[0] < 2 && rl >= 6 && (first && level === 6 || rng() < Math.min(0.45, 0.28 + 0.03 * (rl - 6)))) t.mirror = true;
+      if (rl >= 7 && !t.mirror && (first && level === 7 || rng() < Math.min(0.5, 0.3 + 0.04 * (rl - 7)))) t.cloak = true;
     }
     if ((level === 3 && cleared + targets.length === 1) || (level === 1 && spawned === 9)) { t.shade = true; t.seq = []; t.mirror = t.cloak = false; }
     lastVoid = t.shade;
@@ -994,8 +1078,14 @@
     // the whole world scrolls with the thumb, like a feed
     if (g === 'up') { scrollKick = 1150 * U; jolt = -22 * U; sfx.swish(true); }
     else if (g === 'down') { scrollKick = -850 * U; jolt = 22 * U; sfx.swish(false); }
-    const t = front();
-    if (!t) { buzz(HAPTIC.swipe); return; }
+    const multi = lanes() > 1;
+    const t = multi ? frontIn(aimLane) : front();
+    if (!t) {
+      buzz(HAPTIC.swipe);
+      // a move made in an empty lane while signals are falling elsewhere is a miss-aim
+      if (multi && g !== 'hold' && front()) penalty(0.04, 'Nothing in that lane', field.cx + aimLane * laneGap(), field.heartY - 90 * U);
+      return;
+    }
     if (t.bonus) { if (t.act === 'memory') openBonus(t); else startAct(t, t.act); return; }
     if (t.shade) {
       if (g === 'hold') return;
@@ -1037,6 +1127,7 @@
     light = Math.min(1, light + (el === 1 ? 0.014 : 0.007));
     hitStop = 0.04;
     learned[el]++;
+    if (t.lane != null) learned.aim++;
     if (t.mirror) learned.mirror++;
     if (t.cloak) learned.cloak++;
     if (t.seq.length > 1) learned.bound++;
@@ -1354,9 +1445,9 @@
     const left = Math.max(1, goal - cleared);
     const sigs = left + ' signal' + (left === 1 ? '' : 's');
     // close to the end of a seat, name what was nearly reached; otherwise name where the run fell
-    overLine = left <= 4 && level < 7 ? sigs + ' short of ' + WORLDS[level].name
-      : left <= 4 && level === 7 ? sigs + ' short of taking the seventh seat'
-      : 'Fell in ' + world().name + (level > 7 ? ', cycle ' + (level - 6) : '') + ' with ' + left + ' to go';
+    overLine = left <= 4 && level === 7 ? sigs + ' short of taking the seventh seat'
+      : left <= 4 && level < LAST ? sigs + ' short of ' + WORLDS[level].name
+      : 'Fell in ' + world().name + (level > LAST ? ', cycle ' + (level - LAST + 1) : '') + ' with ' + left + ' to go';
     if (txMode) {
       overLine = tx.ok + ' of ' + TX_N + ' answered';
       const clean = tx.ok === TX_N;
@@ -1423,7 +1514,7 @@
     // press-and-hold fills a ring, then fires
     if (holding && playing) {
       // the ring only charges when the signal in front is a Lock, so a slow tap can never turn into one
-      const f = front();
+      const f = aimed();
       const lock = !!(f && !f.shade && !f.bonus && needOf(f) === 'hold');
       const was = holdT;
       holdT = lock ? holdT + dt / HOLD_S : 0;
@@ -1440,6 +1531,8 @@
       spawnTimer -= dt;
       if (spawnTimer <= 0 && cleared + targets.length < goal) {
         spawnTarget();
+        // in the last seats two signals sometimes arrive together, in different lanes
+        if (level >= 10 && cleared + targets.length < goal && rng() < 0.22) spawnTarget(targets[targets.length - 1].lane);
         spawnTimer = spawnGap();
       }
     }
@@ -1471,7 +1564,7 @@
         } else if (useShield(field.cx, field.heartY)) {
           tallyUp('hit');
         } else {
-          light -= Math.min(0.2, 0.1 + 0.03 * level); // gentler while the first seats are being learned
+          light -= Math.min(0.2, 0.1 + 0.03 * speedLevel()); // gentler while the first seats are being learned
           flash = 1;
           combo = 0;
           tallyUp('missed');
@@ -1488,7 +1581,7 @@
       }
     }
 
-    if (playing) light -= (dt * (1 + 0.08 * (level - 1))) / 90;
+    if (playing) light -= (dt * (1 + 0.08 * (speedLevel() - 1))) / 90;
     if (txMode) light = 1; // a transmission always plays to the end
     if (playing && light <= 0) { light = 0; gameOver(); }
     if (mode === 'interlude') {
@@ -1553,9 +1646,10 @@
     if (pips !== lastPips) { lastPips = pips; ui.pips.textContent = pips; }
     let hint = '';
     if (mode === 'play') {
-      const t = front();
+      const t = aimed() || front();
       if (t) {
-        if (t.tip) hint = t.tip;
+        if (lanes() > 1 && learned.aim < 4) hint = TOUCH ? "Aim: make your move in the signal's own lane" : 'Aim with ← →, then answer';
+        else if (t.tip) hint = t.tip;
         else if (t.bonus) hint = (t.act === 'metro' ? 'The metronome' : t.act === 'heart' ? 'A heartbeat' : 'A Memory') + '. Any move opens it';
         else if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
         else if (isCloaked(t)) { if (learned.cloak < 2) hint = 'Cloaked: it shows itself close to the seat'; }
@@ -1715,7 +1809,8 @@
     const wob = t.wob > 0 ? Math.sin(t.wob * 60) * 6 * U * (t.wob / 0.35) : 0;
     const fadeIn = clamp((t.y - (field.top - 40 * U)) / (70 * U), 0, 1);
     // the front one follows the thumb a little while dragging, like a reel being pulled
-    const drag = isFront && !t.shade ? clamp(dragY, -SWIPE_PX, SWIPE_PX) * 0.7 : 0;
+    const mine = t === aimed();
+    const drag = mine && !t.shade ? clamp(dragY, -SWIPE_PX, SWIPE_PX) * 0.7 : 0;
     const x = targetX(t) + wob, y = t.y + jolt + drag;
     const r = 27 * U;
     ctx.globalAlpha = fadeIn;
@@ -1793,7 +1888,7 @@
         ctx.lineTo(x + r + 16 * U, y);
         ctx.stroke();
       } else {
-        drawCue(el, x, y, r, isFront, holdT);
+        drawCue(el, x, y, r, isFront, mine ? holdT : 0);
       }
       if (isFront) {
         ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -1819,7 +1914,7 @@
     ctx.ellipse(hx, hy + 6 * U, field.path * 0.8, 14 * U, 0, 0, TAU);
     ctx.stroke();
     // seven marks around the core, lit for each seat reached
-    const lit = seatOf(level);
+    const lit = Math.min(7, seatOf(level));
     for (let i = 0; i < 7; i++) {
       const a = -Math.PI / 2 + (i / 7) * TAU + time * 0.25;
       ctx.fillStyle = i < lit ? `rgba(${acc},0.95)` : 'rgba(255,255,255,0.16)';
@@ -2184,7 +2279,7 @@
       ctx.setLineDash([]);
     }
     // on the last seat, a faint line marks where cloaked signals show themselves
-    if (seatOf(level) === 7 && mode === 'play') {
+    if (ruleLevel() >= 7 && mode === 'play') {
       ctx.strokeStyle = 'rgba(255,220,130,0.22)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([2 * U, 10 * U]);
@@ -2193,6 +2288,27 @@
       ctx.lineTo(hx + field.path, revealY());
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // lanes: a column for each, the aimed one lit, and a pad under the thumb
+    if (lanes() > 1 && (mode === 'play' || mode === 'interlude')) {
+      const gap = laneGap(), acc = world().accent, list = lanes() === 2 ? [-1, 1] : [-1, 0, 1];
+      for (const l of list) {
+        const x = hx + l * gap, on = l === aimLane;
+        const col = ctx.createLinearGradient(0, field.top, 0, hy);
+        col.addColorStop(0, `rgba(${acc},0)`);
+        col.addColorStop(1, `rgba(${acc},${on ? 0.2 : 0.05})`);
+        ctx.fillStyle = col;
+        ctx.fillRect(x - gap * 0.44, field.top, gap * 0.88, hy - field.top);
+        const py = hy + 22 * U;
+        ctx.fillStyle = `rgba(${acc},${on ? 0.3 : 0.07})`;
+        ctx.strokeStyle = `rgba(${acc},${on ? 0.95 : 0.4})`;
+        ctx.lineWidth = (on ? 2.5 : 1.5) * U;
+        ctx.beginPath();
+        ctx.roundRect(x - gap * 0.42, py, gap * 0.84, 46 * U, 14 * U);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
 
     // the glow: answers made inside this band are worth far more
@@ -2225,7 +2341,8 @@
 
     // draw far ones first so the front signal sits on top
     const order = targets.slice().sort((a, b) => a.y - b.y);
-    for (const t of order) drawTarget(t, t === f);
+    const fronts = lanes() > 1 ? [frontIn(-1), frontIn(0), frontIn(1)] : [f];
+    for (const t of order) drawTarget(t, fronts.includes(t));
 
     for (const g of ghosts) drawOrb(g.el, g.x, g.y, g.r, clamp(g.life / g.max + 0.3, 0, 1));
 
@@ -2348,6 +2465,7 @@
     buzz(HAPTIC.touch);
     ptr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), done: false };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    if (mode === 'play' && lanes() > 1) aimLane = laneAt(e.clientX); // where the thumb lands is the aim
     dragY = 0;
     holding = true;
     holdT = 0;
@@ -2406,6 +2524,12 @@
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
     if (mode === 'bonus') { if (k >= '1' && k <= '6') pickBonus(+k - 1); return; }
     if (mode === 'act') { if (k === ' ' || k === 'Enter' || k.startsWith('Arrow')) { e.preventDefault(); actTap(); } return; }
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'ArrowRight' || k === 'd' || k === 'D') {
+      e.preventDefault();
+      const dir = k === 'ArrowLeft' || k === 'a' || k === 'A' ? -1 : 1;
+      if (lanes() === 2) aimLane = dir; else if (lanes() === 3) aimLane = clamp(aimLane + dir, -1, 1);
+      return;
+    }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') { e.preventDefault(); gesture('up'); }
     else if (k === 'ArrowDown' || k === 's' || k === 'S') { e.preventDefault(); gesture('down'); }
     else if (k === ' ') { e.preventDefault(); if (mode === 'pause') togglePause(); else gesture('like'); }
