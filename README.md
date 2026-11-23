@@ -56,6 +56,26 @@ and draws the signal's own mark. After playing it, the player shares a link
 (`?s=<code>&p=<score>`); whoever opens it gets the same run and a mark to beat. Nothing is
 sent to a server: the whole signal lives in the link.
 
+## The gamble, and the first four signals
+
+A signal can be answered early and safely, or left to come close to the seat for about three
+times the points. A faint gold band marks the close zone; a close answer sends a gold wave back
+up the lane, adds a fifth to the note and is labelled "close". On a player's very first run the
+first four signals teach this one at a time: swipe up; wait for the glow; your call; then a
+silence to let pass.
+
+## Transmissions (head to head)
+
+Any signal run, daily or sent by a friend, is a transmission: thirteen signals, identical in
+order and timing for everyone who opens the link, with no time meter, prizes or interval acts.
+The link carries the sender's result (`&p=<score>&r=<answered>`), so the recipient sees
+"A friend answered 12 of 13" and the end screen compares the two and offers a rematch.
+
+## The ending
+
+Clearing Seat VII stops the action: the signal goes back, six seats answer one by one, and the
+seventh answers with the last notes the player played. Endless play continues from there.
+
 ## Today's signal and sharing
 
 - **Today's signal:** one run a day, the same for everyone, made by hashing the date into a

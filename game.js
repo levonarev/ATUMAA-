@@ -45,7 +45,7 @@
     hud: $('hud'), grove: $('grove'), pips: $('pips'), light: $('light'), score: $('score'),
     clock: $('clock'), hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
-    finalScore: $('final-score'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
+    finalScore: $('final-score'), again: $('btn-again'), endless: $('btn-endless'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
     sound: $('btn-sound'),
     // send a signal
@@ -426,12 +426,13 @@
     if (!ac || muted) { musicNext = 0; return; }
     const step = 60 / (96 + 2 * Math.min(level, 8)) / 2; // eighth notes
     if (!musicNext || musicNext < ac.currentTime - 0.3) musicNext = ac.currentTime + 0.05;
+    const lead = front(), hush = !!(lead && lead.shade); // the sound falls away while a silence leads
     while (musicNext < ac.currentTime + 0.2) {
       const when = Math.max(0, musicNext - ac.currentTime), st = musicStep % 8, root = ROOTS[seatOf(level) - 1];
-      if (st % 4 === 0) tone(105, 0.16, 'sine', 0.045, when, 44);           // pulse
+      if (!hush && st % 4 === 0) tone(105, 0.16, 'sine', 0.045, when, 44);           // pulse
       if (st % 4 === 2) noise(0.03, 0.03, 5200, when, 3);                  // metronome tick
       const bass = [1, 0, 0, 1.5, 1.2, 0, 1.5, 0][st];
-      if (bass) tone(root * bass, 0.24, 'triangle', 0.026, when);
+      if (bass && !hush) tone(root * bass, 0.24, 'triangle', 0.026, when);
       if (st === 6 && musicStep % 16 === 14) tone(root * 4, 0.5, 'sine', 0.018, when);
       musicNext += step;
       musicStep++;
@@ -440,6 +441,9 @@
 
   const sfx = {
     tap: () => tone(880, 0.035, 'sine', 0.03),
+    // the asteroid calls in four notes at the start of a seat; clearing the seat answers in three
+    call: () => { const r = ROOTS[seatOf(level) - 1] * 4; [1, 1.5, 1.335, 2].forEach((m, i) => tone(r * m, 0.32, 'sine', 0.05, 0.3 + i * 0.17)); },
+    reply: () => { const r = ROOTS[seatOf(level) - 1] * 4; [2, 1.5, 2.67].forEach((m, i) => { tone(r * m, 0.7, 'triangle', 0.075, i * 0.16); tone(r * m * 2, 0.7, 'sine', 0.03, i * 0.16); }); },
     tally: (k) => tone(900 + k * 500, 0.03, 'square', 0.018),
     perfect: () => [1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, 0.35, 'sine', 0.06, 0.75 + i * 0.07)),
     best: () => [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.5, 'triangle', 0.07, i * 0.09)),
@@ -475,7 +479,7 @@
   // interval act: a Memory signal opens a wall of six screens; pick one, then all are revealed
   const PRIZES = {
     skip: { label: 'Skip to next seat', rgb: '230,196,106' },
-    time: { label: 'Time restored', rgb: '95,201,243' },
+    time: { label: 'Signal restored', rgb: '95,201,243' },
     score: { label: 'Bonus', rgb: '255,200,87' },
     shield: { label: 'Shield: one mistake forgiven', rgb: '125,220,132' },
     empty: { label: 'Nothing here', rgb: '150,155,170' },
@@ -526,9 +530,13 @@
   function signalFromUrl() {
     try {
       const p = new URLSearchParams(location.search);
-      if (p.has('daily')) { const d = p.get('daily') || ''; return dailySignal(/^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : today()); }
-      const m = parseInt(p.get('p') || '', 36);
-      return makeSignal((p.get('s') || '').toLowerCase(), Number.isFinite(m) && m > 0 ? m : null, false);
+      const m = parseInt(p.get('p') || '', 36), r = parseInt(p.get('r') || '', 10);
+      let sig;
+      if (p.has('daily')) { const d = p.get('daily') || ''; sig = dailySignal(/^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : today()); }
+      else sig = makeSignal((p.get('s') || '').toLowerCase(), null, false);
+      // the sender's result, to play against
+      if (sig && Number.isFinite(m) && m >= 0 && Number.isFinite(r) && r >= 0 && r <= TX_N) sig.theirs = { r, p: m };
+      return sig;
     } catch (e) { return null; }
   }
 
@@ -542,7 +550,7 @@
     sig.daily = d;
     return sig;
   }
-  function dayLabel(d) { return d === today() ? "Today's signal" : 'The signal of ' + d; }
+  function dayLabel(d) { return d === today() ? "Today's transmission" : 'The transmission of ' + d; }
   // the day turns over at 00:00 UTC for everyone; show that moment on the player's own clock
   function resetTime() {
     const n = new Date();
@@ -555,8 +563,7 @@
   }
 
   function signalUrl(sig, mark) {
-    if (sig.daily) return location.origin + location.pathname + '?daily=' + sig.daily;
-    return location.origin + location.pathname + '?s=' + sig.code + (mark > 0 ? '&p=' + Math.round(mark).toString(36) : '');
+    return location.origin + location.pathname + (sig.daily ? '?daily=' + sig.daily : '?s=' + sig.code) + '&p=' + Math.round(mark).toString(36) + '&r=' + tx.ok;
   }
 
   // every signal has its own mark: six points set around a ring by its rhythm
@@ -648,7 +655,18 @@
   }
 
   let overLine = '';
+  // A signal run is a transmission: thirteen signals, identical for everyone who opens it,
+  // with no time meter, prizes or interval acts, so two results can be compared fairly.
+  const TX_N = 13;
+  let txMode = false, txGap = 0, txHowI = '';
+  const tx = { ok: 0, flinch: false, missed: 0 };
+  let guided = false;          // first run ever: the first four signals teach the gamble
+  let phrase = [], endT = 0;   // the last notes the player played; the Seat VII ending
+  function txName() {
+    return signal.daily ? dayLabel(signal.daily) : 'Transmission ' + String(parseInt(signal.code, 16) % 100000).padStart(5, '0');
+  }
   function resultLine() {
+    if (txMode) return 'ATUMAA · ' + txName() + ' · ' + tx.ok + ' of ' + TX_N + ' answered. ' + txHowI + (tx.ok === TX_N ? 'Can you match it?' : 'Can you get all ' + TX_N + '?');
     return 'ATUMAA ' + ROMAN[seatOf(level) - 1] + ' · ' + accuracy(runStats) + '% clean · ' + score.toLocaleString() + ' · ' + overLine;
   }
 
@@ -676,12 +694,12 @@
     g.fillText('T H E   S E V E N T H   S E A T', cx, 320);
     g.fillStyle = gold;
     g.font = `700 150px ${FONT}`;
-    g.fillText('SEAT ' + ROMAN[seatOf(level) - 1], cx, 620);
+    g.fillText(txMode ? tx.ok + ' OF ' + TX_N : 'SEAT ' + ROMAN[seatOf(level) - 1], cx, 620);
     g.fillStyle = '#fff';
     g.font = `600 56px ${FONT}`;
-    g.fillText(world().name.toUpperCase(), cx, 710);
+    g.fillText((txMode ? txName() : world().name).toUpperCase(), cx, 710);
     // seven marks, lit for each seat reached
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 7 && !txMode; i++) {
       g.beginPath();
       g.arc(cx + (i - 3) * 92, 830, 22, 0, TAU);
       if (i < seatOf(level)) { g.fillStyle = gold; g.fill(); } else { g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 4; g.stroke(); }
@@ -702,7 +720,7 @@
       g.drawImage(mark, cx - 180, 1320);
       g.fillStyle = 'rgba(255,255,255,0.8)';
       g.font = `600 38px ${FONT}`;
-      g.fillText(signal.daily ? 'SIGNAL OF ' + signal.daily : 'ANSWER THIS SIGNAL', cx, 1730);
+      g.fillText('ANSWER THIS SIGNAL', cx, 1730);
     } else {
       g.fillStyle = '#fffbe6';
       g.beginPath(); g.arc(cx, 1500, 44, 0, TAU); g.fill();
@@ -728,7 +746,7 @@
   function shareSignal() {
     const url = signal ? signalUrl(signal, score) : location.origin + location.pathname;
     const lead = !signal ? '' : signal.daily ? dayLabel(signal.daily) + '. ' : signal.mine ? 'I sent you a signal. Answer it. ' : 'I answered this signal. Your turn. ';
-    const text = lead + resultLine();
+    const text = txMode ? resultLine() : lead + resultLine();
     const note = (msg) => { ui.shareNote.textContent = msg; };
     const copy = () => {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
@@ -743,6 +761,7 @@
 
   function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (level - 1))) * H; }
   function spawnGap() {
+    if (guided && level === 1 && spawned <= 4) return 2.3; // one at a time while the gamble is being learned
     const base = Math.max(0.44, 1.18 - 0.075 * level);
     // a shared signal falls in the rhythm it was tapped in
     if (signal) return base * (0.78 + 0.44 * signal.norm[sigStep++ % signal.norm.length]);
@@ -783,6 +802,13 @@
     ui.grove.textContent = seatLabel();
     buildBackdrop();
     showBanner(world().name + '<small>' + seatLabel() + (level <= 7 ? ' · ' + world().adds : ' · faster') + '</small>', 2.4);
+    if (txMode) {
+      goal = TX_N;
+      bonusDone = true;
+      txGap = 4 + ((rng() * 7) | 0); // every transmission has at least one silence in it
+      ui.grove.textContent = 'Transmission';
+      showBanner(txName() + '<small>' + TX_N + ' signals · the same for everyone who opens it</small>', 2.4);
+    } else sfx.call();
   }
 
   function resetRun() {
@@ -794,6 +820,10 @@
     lastVoid = false;
     ptr = null; dragY = 0; holding = false; keyHold = false;
     rng = signal ? mulberry32(parseInt(signal.code, 16) + 1) : Math.random;
+    txMode = !!signal;
+    guided = !played && !signal;
+    tx.ok = 0; tx.flinch = false; tx.missed = 0;
+    phrase = [];
     sigStep = 0;
   }
 
@@ -809,7 +839,7 @@
     initAudio();
     resetRun();
     setMode('play');
-    setupLevel(1);
+    setupLevel(txMode ? 3 : 1);
   }
 
   function setMode(m) {
@@ -817,10 +847,11 @@
     const playing = m === 'play' || m === 'interlude';
     ui.title.hidden = m !== 'title';
     ui.compose.hidden = m !== 'compose';
+    ui.endless.hidden = true;
     if (m === 'title') { const fresh = !played; ui.daily.hidden = fresh; ui.signalBtn.hidden = fresh; }
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
-    ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose';
+    ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose' || m === 'ending';
     ui.skip.hidden = m !== 'intro';
     if (!playing) ui.hint.hidden = true;
     if (m === 'intro' || m === 'over' || m === 'compose') { ui.banner.hidden = true; bannerT = 0; }
@@ -830,6 +861,21 @@
   function spawnTarget() {
     spawned++;
     const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rng() * TAU, wob: 0 };
+    if (txMode) {
+      if (spawned === txGap || (!lastVoid && spawned > 2 && rng() < 0.12)) t.shade = true;
+      else t.seq.push((rng() * 3) | 0);
+      lastVoid = t.shade;
+      targets.push(t);
+      return;
+    }
+    if (guided && level === 1 && spawned <= 4) {
+      // swipe up; then wait for the glow; then choose for yourself; then keep your thumb still
+      if (spawned === 4) { t.shade = true; t.soft = true; t.tip = 'Silence. Let this one pass, do not touch'; }
+      else { t.seq.push(0); t.wait = spawned === 2; t.tip = spawned === 1 ? 'Swipe up' : spawned === 2 ? 'Wait for the glow, then swipe up' : 'Your call: the closer, the more it is worth'; }
+      lastVoid = t.shade;
+      targets.push(t);
+      return;
+    }
     if (!bonusDone && cleared + targets.length >= bonusAt) {
       bonusDone = true;
       t.bonus = true;
@@ -884,7 +930,9 @@
     if (t.shade) {
       if (g === 'hold') return;
       t.wob = 0.35;
-      penalty(0.12, 'You lost time', targetX(t), t.y, HAPTIC.lostTime);
+      t.touched = true;
+      if (txMode) tx.flinch = true;
+      penalty(t.soft ? 0.03 : 0.12, 'You touched the silence', targetX(t), t.y, HAPTIC.lostTime);
       return;
     }
     if (needOf(t) === g) answer(t, t.seq[t.done]);
@@ -901,7 +949,20 @@
     bestCombo = Math.max(bestCombo, combo);
     tallyUp('hit');
     buzz(combo % 8 === 0 ? HAPTIC.streak : HAPTIC[needOf(t)]);
-    const pts = Math.round((10 + 20 * near) * multiplier() * (t.mirror || t.cloak ? 1.5 : 1));
+    // the gamble: answer early and safe, or let it come close for much more
+    const close = near > 0.7;
+    const pts = Math.round((close ? 30 : 10 + 14 * near) * multiplier() * (t.mirror || t.cloak ? 1.5 : 1));
+    phrase.push(ELEMENTS[el].note);
+    if (phrase.length > 7) phrase.shift();
+    if (close) {
+      // the seat sends a gold wave back up the lane, and the note gains a fifth
+      rings.push({ x: field.cx, y: field.heartY, r: 20, max: (field.heartY - field.top) * 1.05, life: 0.6, rgb: '230,196,106' });
+      heartPulse = 1;
+      tone(ELEMENTS[el].note * 1.5, 0.32, 'sine', 0.07, 0.03);
+    } else {
+      rings.push({ x: field.cx, y: field.heartY, r: 14, max: 44 * U, life: 0.3, rgb: world().accent });
+      if (t.wait) texts.push({ x: field.cx, y: H * 0.46, text: 'Early. Next time wait for the glow', life: 1.6, rgb: '230,196,106', size: 17 });
+    }
     score += pts;
     light = Math.min(1, light + (el === 1 ? 0.014 : 0.007));
     hitStop = 0.04;
@@ -926,12 +987,13 @@
       burst(x, y, rgb, 14, 90);
     }
     burst(x, y, rgb, 8, 160);
-    texts.push({ x: x + 46 * U, y: y - 8 * U, text: '+' + pts, life: 0.9, rgb: '255,243,196', size: 18 });
+    texts.push({ x: x + 50 * U, y: y - 8 * U, text: '+' + pts + (close ? ' close' : ''), life: 0.9, rgb: close ? '230,196,106' : '255,243,196', size: close ? 21 : 18 });
     if (combo % 8 === 0) texts.push({ x: field.cx, y: H * 0.42, text: 'Streak ' + combo + '  ×' + multiplier(), life: 1.3, rgb, size: 26 });
     t.done++;
     t.cloak = false;
     if (t.done >= t.seq.length) {
       targets.splice(targets.indexOf(t), 1);
+      if (txMode) tx.ok++;
       clearedOne();
     }
   }
@@ -1052,7 +1114,7 @@
         score += pts;
         light = Math.min(1, light + 0.3);
         if (exact) shield++;
-        finishAct(exact ? 'Exact' : 'Found it', '+' + pts + ' · time back' + (exact ? ' · shield' : ''), true);
+        finishAct(exact ? 'Exact' : 'Found it', '+' + pts + ' · signal back' + (exact ? ' · shield' : ''), true);
       } else finishAct('That beat was true', 'No prize', false);
     }
   }
@@ -1084,7 +1146,7 @@
         const hits = perfect + good, pts = (perfect * 80 + good * 40) * level;
         score += pts;
         let sub = pts ? '+' + pts : 'No prize';
-        if (hits >= 5) { light = 1; sub += ' · time restored'; }
+        if (hits >= 5) { light = 1; sub += ' · signal restored'; }
         if (perfect === 6) { shield++; sub += ' · shield'; }
         finishAct(hits + ' of 6 in time', sub, hits >= 3);
       }
@@ -1102,7 +1164,8 @@
   function clearedOne() {
     cleared++;
     totalCleared++;
-    if (cleared >= goal) startInterlude();
+    if (cleared < goal) return;
+    if (txMode) gameOver(); else if (level === 7) startEnding(); else startInterlude();
   }
 
   function useShield(x, y) {
@@ -1144,7 +1207,69 @@
     if (perfect) sfx.perfect();
     for (let i = 0; i < 6; i++) setTimeout(() => { if (mode === 'interlude') sfx.tally(i / 6); }, 900 + i * 70);
     ui.hint.hidden = true;
-    sfx.dawn();
+    sfx.reply();
+  }
+
+  // Seat VII stops the action: the signal goes back, six seats answer, and the seventh
+  // answers with the last phrase the player actually played.
+  function startEnding() {
+    score += 1400;
+    light = 1;
+    for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : t.bonus ? '230,196,106' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
+    targets = [];
+    endT = 0;
+    setMode('ending');
+    buzz(HAPTIC.seat);
+    [1, 1.5, 1.335, 2].forEach((m, i) => tone(196 * m, 0.55, 'sine', 0.08, 1.0 + i * 0.3));
+    for (let i = 0; i < 6; i++) tone(SIG_NOTES[i], 0.5, 'triangle', 0.07, 2.8 + i * 0.42);
+    (phrase.length ? phrase : [392, 523.25, 587.33]).forEach((f, i) => { tone(f, 0.5, 'triangle', 0.09, 5.8 + i * 0.27); tone(f * 2, 0.5, 'sine', 0.04, 5.8 + i * 0.27); });
+  }
+
+  function drawEnding() {
+    const cx = field.cx, gold = '230,196,106', t = endT;
+    ctx.fillStyle = `rgba(2,2,4,${0.82 * clamp(t * 1.5, 0, 1)})`;
+    ctx.fillRect(-40, -40, W + 80, H + 80);
+    const span = Math.min(W * 0.92, 640 * U), sw = span / 8.4, y0 = H * 0.4;
+    // the signal going back up from the receiver
+    for (let k = 0; k < 3; k++) {
+      const q = (t - 1 - k * 0.35) / 1.6;
+      if (q > 0 && q < 1) {
+        ctx.strokeStyle = `rgba(${gold},${1 - q})`;
+        ctx.lineWidth = 3 * U;
+        ctx.beginPath();
+        ctx.arc(cx, H * 0.74, q * H * 0.5, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      }
+    }
+    const order = [0, 1, 2, 4, 5, 6];
+    for (let i = 0; i < 7; i++) {
+      const x = cx + (i - 3) * (span / 7), y = y0 - (3 - Math.abs(i - 3)) * 10 * U;
+      const at = i === 3 ? 5.8 : 2.8 + order.indexOf(i) * 0.42;
+      const lit = clamp((t - at) * 3, 0, 1), mine = i === 3;
+      if (lit > 0) glow(x, y, sw * (mine ? 3 : 1.7), mine ? gold : '200,210,255', (mine ? 0.75 : 0.4) * lit);
+      ctx.fillStyle = lit > 0 ? (mine ? '#4a3c1c' : '#262a36') : '#101014';
+      ctx.strokeStyle = mine ? `rgba(${gold},${0.35 + 0.65 * lit})` : `rgba(200,210,255,${0.25 + 0.55 * lit})`;
+      ctx.lineWidth = (mine ? 2.5 : 1.5) * U;
+      ctx.beginPath();
+      ctx.rect(x - sw / 2, y - sw * 1.0, sw, sw * 0.55);
+      ctx.rect(x - sw / 2, y - sw * 0.45, sw, sw * 0.9);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#fffbe6';
+    ctx.beginPath();
+    ctx.arc(cx, H * 0.74, 12 * U * (1 + 0.06 * Math.sin(time * 3)), 0, TAU);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    const line = t < 1 ? '' : t < 2.7 ? 'THE SIGNAL GOES BACK' : t < 5.7 ? 'SIX ANSWER' : 'THE SEVENTH IS YOU';
+    ctx.fillStyle = `rgb(${gold})`;
+    ctx.font = `700 ${Math.round(25 * U)}px ${FONT}`;
+    ctx.fillText(line, cx, H * 0.58);
+    if (t > 7) {
+      ctx.fillStyle = `rgba(255,255,255,${clamp((t - 7) * 2, 0, 1) * 0.9})`;
+      ctx.font = `600 ${Math.round(14 * U)}px ${FONT}`;
+      ctx.fillText('IT WAS LOOKING FOR YOU.', cx, H * 0.58 + 30 * U);
+    }
   }
 
   function gameOver() {
@@ -1162,8 +1287,14 @@
     overLine = left <= 4 && level < 7 ? sigs + ' short of ' + WORLDS[level].name
       : left <= 4 && level === 7 ? sigs + ' short of taking the seventh seat'
       : 'Fell in ' + world().name + (level > 7 ? ', cycle ' + (level - 6) : '') + ' with ' + left + ' to go';
+    if (txMode) {
+      overLine = tx.ok + ' of ' + TX_N + ' answered';
+      const clean = tx.ok === TX_N;
+      txHowI = clean ? 'Clean. ' : tx.flinch ? 'I flinched on the silence. ' : tx.missed ? 'I let ' + tx.missed + ' slip past. ' : '';
+      ui.finalDetail.textContent = txName() + ' · ' + (clean ? 'A clean transmission.' : tx.flinch ? 'You flinched on the silence.' : tx.missed ? tx.missed + ' slipped past.' : 'So close.');
+    }
     ui.overTitle.textContent = overLine;
-    ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
+    if (!txMode) ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
     const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Interval acts', memories]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
     buildCard();
@@ -1183,13 +1314,20 @@
         dayBest = Math.max(dailyBest(sig.daily), score);
         try { localStorage.setItem('atumaa.daily.' + sig.daily, String(dayBest)); } catch (e) { /* storage blocked */ }
       }
-      ui.signalResult.textContent = sig.daily ? dayLabel(sig.daily) + ': the same run for everyone. Your best is ' + dayBest.toLocaleString() + '.' + (sig.daily === today() ? ' A new signal arrives at ' + resetTime() + '.' : '')
+      // one human line first: how it went against the person who sent it
+      const them = sig.theirs;
+      const cmp = !them ? ''
+        : tx.ok > them.r ? 'They answered ' + them.r + '. You answered ' + tx.ok + '. You win.'
+        : tx.ok < them.r ? 'They answered ' + them.r + '. You answered ' + tx.ok + '. Rematch?'
+        : score > them.p ? 'You both answered ' + tx.ok + '. You waited longer and won by ' + (score - them.p) + '.'
+        : score < them.p ? 'You both answered ' + tx.ok + '. They waited longer and won by ' + (them.p - score) + '.'
+        : 'A dead heat: ' + tx.ok + ' answered and ' + score + ' points each.';
+      ui.signalResult.textContent = cmp || (sig.daily ? 'The same ' + TX_N + ' signals for everyone. Your best is ' + dayBest.toLocaleString() + '.' + (sig.daily === today() ? ' A new one arrives at ' + resetTime() + '.' : '')
         : sig.mine ? 'Your signal is ready. Send it and see who can answer it.'
-        : !sig.mark ? 'You answered the signal.'
-        : score > sig.mark ? 'You answered it. Their mark was ' + sig.mark.toLocaleString() + '.'
-        : 'The signal holds. Their mark is ' + sig.mark.toLocaleString() + '.';
-      ui.share.textContent = sig.daily ? 'Share this result' : sig.mine ? 'Send this signal' : 'Pass it on';
+        : 'Send it on and see who can match you.');
+      ui.share.textContent = them ? 'Send it back' : sig.mine ? 'Send this signal' : 'Challenge a friend';
     }
+    ui.again.textContent = sig ? 'Rematch' : 'Try again';
     sfx.over();
     buzz(HAPTIC.over);
   }
@@ -1240,6 +1378,7 @@
           combo++;
           bestCombo = Math.max(bestCombo, combo);
           learned.void++;
+          if (txMode && !t.touched) tx.ok++;
           tallyUp('hit');
           buzz(HAPTIC.letGo);
           const pts = 25 * multiplier();
@@ -1254,6 +1393,7 @@
           flash = 1;
           combo = 0;
           tallyUp('missed');
+          if (txMode) tx.missed++;
           buzz(HAPTIC.missed);
           shake = 0.35;
           heartPulse = 1;
@@ -1267,6 +1407,7 @@
     }
 
     if (playing) light -= (dt * (1 + 0.08 * (level - 1))) / 90;
+    if (txMode) light = 1; // a transmission always plays to the end
     if (playing && light <= 0) { light = 0; gameOver(); }
     if (mode === 'interlude') {
       interlude -= dt;
@@ -1326,13 +1467,14 @@
     const clock = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
     if (clock !== lastClock) { lastClock = clock; ui.clock.textContent = clock; }
     ui.light.classList.toggle('low', light < 0.25 && mode === 'play');
-    const pips = cleared + ' / ' + goal;
+    const pips = 'Signal ' + Math.min(cleared + 1, goal) + ' of ' + goal;
     if (pips !== lastPips) { lastPips = pips; ui.pips.textContent = pips; }
     let hint = '';
     if (mode === 'play') {
       const t = front();
       if (t) {
-        if (t.bonus) hint = (t.act === 'metro' ? 'The metronome' : t.act === 'heart' ? 'A heartbeat' : 'A Memory') + '. Any move opens it';
+        if (t.tip) hint = t.tip;
+        else if (t.bonus) hint = (t.act === 'metro' ? 'The metronome' : t.act === 'heart' ? 'A heartbeat' : 'A Memory') + '. Any move opens it';
         else if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
         else if (isCloaked(t)) { if (learned.cloak < 2) hint = 'Cloaked: it shows itself close to the seat'; }
         else if (t.mirror) { if (learned.mirror < 3) hint = 'Mirrored: swipe the opposite way'; }
@@ -1673,7 +1815,7 @@
         prizeIcon(tile.prize, 0, -tile.h * 0.1, tile.h * 0.22, p.rgb);
         ctx.fillStyle = `rgb(${p.rgb})`;
         ctx.font = `600 ${Math.round(10.5 * U)}px ${FONT}`;
-        const words = tile.prize === 'score' ? '+' + 500 * level : tile.prize === 'shield' ? 'Shield' : tile.prize === 'skip' ? 'Skip seat' : tile.prize === 'time' ? 'Full time' : 'Nothing';
+        const words = tile.prize === 'score' ? '+' + 500 * level : tile.prize === 'shield' ? 'Shield' : tile.prize === 'skip' ? 'Skip seat' : tile.prize === 'time' ? 'Full signal' : 'Nothing';
         ctx.fillText(words.toUpperCase(), 0, tile.h * 0.36);
       } else {
         // closed screens flicker like the wall in the corridor
@@ -1943,6 +2085,7 @@
 
     if (mode === 'intro') { drawIntro(); return; }
     if (mode === 'title' || mode === 'compose') return;
+    if (mode === 'ending') { drawEnding(); return; }
 
     const hx = field.cx, hy = field.heartY;
     const f = front();
@@ -1968,6 +2111,24 @@
       ctx.lineTo(hx + field.path, revealY());
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // the glow: answers made inside this band are worth far more
+    if (mode === 'play') {
+      const zy = lerp(field.top, field.heartY, 0.7), zb = field.heartY - 30 * U;
+      const wait = !!(f && f.wait && f.y < zy);
+      const a = wait ? 0.3 + 0.12 * Math.sin(time * 8) : 0.15;
+      const g = ctx.createLinearGradient(0, zy, 0, zb);
+      g.addColorStop(0, 'rgba(230,196,106,0)');
+      g.addColorStop(1, `rgba(230,196,106,${a})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(hx - field.path, zy, field.path * 2, zb - zy);
+      ctx.strokeStyle = `rgba(230,196,106,${Math.min(1, a * 2.4)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(hx - field.path, zy);
+      ctx.lineTo(hx + field.path, zy);
+      ctx.stroke();
     }
 
     for (const r of rings) {
@@ -2044,6 +2205,7 @@
     if (mode === 'play' || mode === 'interlude') { if (hitStop > 0) hitStop -= dt; else update(dt); music(); }
     else if (mode === 'bonus') updateBonus(dt);
     else if (mode === 'act') updateAct(dt);
+    else if (mode === 'ending') { time += dt; endT += dt; scrollY += H * 0.04 * dt; if (endT > 8.2 && ui.endless.hidden) ui.endless.hidden = false; }
     else if (mode === 'intro') {
       time += dt;
       introT += dt;
@@ -2184,6 +2346,7 @@
   ui.haptic2.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.daily.addEventListener('click', playDaily);
   ui.daily2.addEventListener('click', playDaily);
+  ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(8); });
   syncToggles();
   for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily', 'btn-daily2']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
 
@@ -2208,7 +2371,8 @@
   if (signal) {
     ui.glyphTitle.hidden = false;
     drawGlyph(ui.glyphTitle, signal);
-    ui.premise.textContent = signal.daily ? dayLabel(signal.daily) + ' is waiting. Everyone who opens it gets the same run. Answer it.' : 'A signal is waiting for you.' + (signal.mark ? ' The mark to beat is ' + signal.mark.toLocaleString() + '.' : '') + ' Answer it.';
+    ui.premise.textContent = signal.theirs ? 'A friend answered ' + signal.theirs.r + ' of ' + TX_N + '. Same signals, same timing. Your turn.'
+      : (signal.daily ? dayLabel(signal.daily) : 'A transmission') + ' is waiting: ' + TX_N + ' signals, the same for everyone. Answer it.';
     ui.start.textContent = 'Answer it';
   }
   resize();
