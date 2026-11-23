@@ -286,6 +286,17 @@
   let best = 0;
   try { best = parseInt(localStorage.getItem('atumaa.best') || '0', 10) || 0; } catch (e) { /* storage blocked */ }
 
+  // interval act: a Memory signal opens a wall of six screens; pick one, then all are revealed
+  const PRIZES = {
+    skip: { label: 'Skip to next seat', rgb: '230,196,106' },
+    time: { label: 'Time restored', rgb: '95,201,243' },
+    score: { label: 'Bonus', rgb: '255,200,87' },
+    shield: { label: 'Shield: one mistake forgiven', rgb: '125,220,132' },
+    empty: { label: 'Nothing here', rgb: '150,155,170' },
+  };
+  let bonus = null;      // {tiles:[{x,y,w,h,prize,open}], picked, t, pickT, applied}
+  let bonusAt = -1, bonusDone = false, shield = 0, memories = 0;
+
   let targets = [];   // {shade,seq,done,mirror,cloak,y,ph,wob}; they fall toward the seat, lowest one is the front
   let ghosts = [];    // answered signals flying off: {el,x,y,vx,vy,life,max,r}
   let particles = []; // {x,y,vx,vy,life,max,rgb,size}
@@ -328,6 +339,8 @@
     level = n;
     cleared = 0;
     seatStats.hit = seatStats.wrong = seatStats.missed = 0;
+    bonusDone = false;
+    bonusAt = Math.floor((10 + 3 * n) * rand(0.35, 0.65));
     goal = 10 + 3 * level;
     spawnTimer = 1.2;
     ui.grove.textContent = seatLabel();
@@ -340,6 +353,7 @@
     targets = []; ghosts = []; particles = []; rings = []; texts = [];
     for (const k in learned) learned[k] = 0;
     runStats.hit = runStats.wrong = runStats.missed = 0;
+    bonus = null; shield = 0; memories = 0;
     lastVoid = false;
     ptr = null; dragY = 0; holding = false; keyHold = false;
   }
@@ -374,7 +388,14 @@
   /* ---------- Spawning ---------- */
   function spawnTarget() {
     spawned++;
-    const t = { shade: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rand(0, TAU), wob: 0 };
+    const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rand(0, TAU), wob: 0 };
+    if (!bonusDone && cleared + targets.length >= bonusAt) {
+      bonusDone = true;
+      t.bonus = true;
+      lastVoid = false;
+      targets.push(t);
+      return;
+    }
     const signs = level >= 4 ? 4 : level >= 2 ? 3 : spawned > 4 ? 2 : 1;
     if (level >= 3 && !lastVoid && Math.random() < Math.min(0.24, 0.12 + 0.02 * level)) {
       t.shade = true;
@@ -417,6 +438,7 @@
     else if (g === 'down') { scrollKick = -1100 * U; jolt = 22 * U; sfx.swish(false); }
     const t = front();
     if (!t) { buzz(HAPTIC.swipe); return; }
+    if (t.bonus) { openBonus(t); return; }
     if (t.shade) {
       if (g === 'hold') return;
       t.wob = 0.35;
@@ -471,13 +493,86 @@
     }
   }
 
+  function openBonus(t) {
+    const x = targetX(t), y = t.y;
+    targets.splice(targets.indexOf(t), 1);
+    memories++;
+    burst(x, y, '230,196,106', 30, 320);
+    const cols = W > H ? 3 : 2, rows = 6 / cols;
+    const tw = Math.min(150 * U, (W - 48) / cols - 12), th = tw * 0.72, gap = 12 * U;
+    const x0 = field.cx - (cols * tw + (cols - 1) * gap) / 2;
+    const y0 = Math.max(field.top + 96 * U, H * 0.5 - (rows * th + (rows - 1) * gap) / 2);
+    const kinds = ['skip', 'time', 'score', 'shield', 'empty', 'empty'];
+    for (let i = kinds.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
+    bonus = { tiles: kinds.map((prize, i) => ({ prize, open: 0, x: x0 + (i % cols) * (tw + gap), y: y0 + Math.floor(i / cols) * (th + gap), w: tw, h: th })), picked: -1, t: 0, pickT: 0, applied: false };
+    ptr = null; dragY = 0; endHold();
+    setMode('bonus');
+    [659.25, 987.77, 1318.5].forEach((f, i) => tone(f, 0.4, 'sine', 0.07, i * 0.09));
+    buzz(HAPTIC.seat);
+  }
+
+  function pickBonus(i) {
+    if (!bonus || bonus.picked >= 0 || bonus.t < 0.45) return;
+    bonus.picked = i;
+    bonus.pickT = bonus.t;
+    sfx.tap();
+    noise(0.08, 0.1, 1400);
+    buzz(HAPTIC.hold);
+  }
+
+  function updateBonus(dt) {
+    time += dt;
+    bonus.t += dt;
+    if (bonus.picked < 0) {
+      if (bonus.t > 9) pickBonus((Math.random() * 6) | 0); // never stall the run
+      return;
+    }
+    const since = bonus.t - bonus.pickT;
+    bonus.tiles.forEach((tile, i) => {
+      // the chosen screen opens at once, the rest follow so you see what you passed up
+      const start = i === bonus.picked ? 0 : 0.9 + 0.12 * i;
+      if (since >= start && tile.open === 0) {
+        tile.open = 0.001;
+        if (i !== bonus.picked) { sfx.tally(i / 6); buzz(HAPTIC.tally); }
+      }
+      if (tile.open > 0) tile.open = Math.min(1, tile.open + dt * 5);
+    });
+    const prize = bonus.tiles[bonus.picked].prize;
+    if (!bonus.applied && since > 0.25) {
+      bonus.applied = true;
+      if (prize === 'empty') { tone(196, 0.3, 'triangle', 0.06, 0, 130); buzz(HAPTIC.wrong); }
+      else { sfx.best(); buzz(HAPTIC.streak); }
+      if (prize === 'time') light = 1;
+      if (prize === 'score') score += 500 * level;
+      if (prize === 'shield') shield++;
+    }
+    if (since > 3) {
+      bonus = null;
+      setMode('play');
+      spawnTimer = Math.max(spawnTimer, 0.7);
+      last = performance.now();
+      if (prize === 'skip') { cleared = goal; startInterlude(); }
+    }
+  }
+
   function clearedOne() {
     cleared++;
     totalCleared++;
     if (cleared >= goal) startInterlude();
   }
 
+  function useShield(x, y) {
+    if (shield <= 0) return false;
+    shield--;
+    texts.push({ x, y: y - 44 * U, text: 'Shielded', life: 1, rgb: PRIZES.shield.rgb, size: 18 });
+    rings.push({ x: field.cx, y: field.heartY, r: 20, max: 90 * U, life: 0.5, rgb: PRIZES.shield.rgb });
+    sfx.pass();
+    buzz(HAPTIC.letGo);
+    return true;
+  }
+
   function penalty(amount, label, x, y, feel) {
+    if (useShield(x, y)) return;
     light -= amount;
     tallyUp('wrong');
     buzz(feel || HAPTIC.wrong);
@@ -517,7 +612,7 @@
     overT = 0; overTick = 0; overBest = isBest && score > 0;
     ui.finalScore.textContent = '0';
     ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
-    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo]];
+    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Memories', memories]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
     ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
     sfx.over();
@@ -556,6 +651,10 @@
       t.wob = Math.max(0, t.wob - dt);
       if (playing && t.y >= field.heartY - 30 * U) {
         targets.splice(i, 1);
+        if (t.bonus) {
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Memory faded', life: 1, rgb: '200,190,160', size: 16 });
+          continue;
+        }
         if (t.shade) {
           // resisting the urge to touch is the right answer
           combo++;
@@ -568,6 +667,8 @@
           burst(field.cx, field.heartY, '150,110,210', 16, 200);
           texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'Let go  +' + pts, life: 1, rgb: '200,180,255', size: 18 });
           sfx.pass();
+        } else if (useShield(field.cx, field.heartY)) {
+          tallyUp('hit');
         } else {
           light -= 0.2;
           combo = 0;
@@ -648,7 +749,8 @@
     if (mode === 'play') {
       const t = front();
       if (t) {
-        if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
+        if (t.bonus) hint = 'A Memory. Any move opens it';
+        else if (t.shade) { if (learned.void < 2) hint = 'A Gap: missing time. Do not touch. Let it scroll past'; }
         else if (isCloaked(t)) { if (learned.cloak < 2) hint = 'Cloaked: it shows itself close to the seat'; }
         else if (t.mirror) { if (learned.mirror < 3) hint = 'Mirrored: swipe the opposite way'; }
         else if (learned[t.seq[t.done]] < 3) hint = HINTS[t.seq[t.done]];
@@ -810,7 +912,25 @@
     const x = targetX(t) + wob, y = t.y + jolt + drag;
     const r = 27 * U;
     ctx.globalAlpha = fadeIn;
-    if (t.shade) {
+    if (t.bonus) {
+      // a slowly turning golden screen
+      glow(x, y, r * 2.8, '230,196,106', 0.5);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(time * 2) * 0.12);
+      ctx.fillStyle = '#0b0906';
+      ctx.strokeStyle = 'rgba(230,196,106,1)';
+      ctx.lineWidth = 2.5 * U;
+      ctx.beginPath();
+      ctx.roundRect(-r * 1.15, -r * 0.82, r * 2.3, r * 1.64, 6 * U);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = `rgba(230,196,106,${0.75 + Math.sin(time * 6) * 0.25})`;
+      ctx.font = `700 ${Math.round(26 * U)}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('?', 0, 9 * U);
+      ctx.restore();
+    } else if (t.shade) {
       drawVoid(x, y, t.ph, isFront);
     } else if (isCloaked(t)) {
       orbBody(x, y, r, '170,175,190', 0.9);
@@ -889,6 +1009,85 @@
     ctx.beginPath();
     ctx.arc(hx, hy, 12 * U * pulse, 0, TAU);
     ctx.fill();
+  }
+
+  function prizeIcon(kind, x, y, r, rgb) {
+    ctx.strokeStyle = ctx.fillStyle = `rgb(${rgb})`;
+    ctx.lineWidth = 3 * U;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    if (kind === 'time') {
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.moveTo(x, y - r * 0.6); ctx.lineTo(x, y); ctx.lineTo(x + r * 0.45, y + r * 0.25);
+      ctx.stroke();
+    } else if (kind === 'score') {
+      ctx.save(); ctx.translate(x, y); iconPath(2, r); ctx.fill(); ctx.restore();
+    } else if (kind === 'skip') {
+      for (const o of [-0.45, 0.35]) {
+        ctx.moveTo(x - r * 0.8, y + r * (o + 0.4)); ctx.lineTo(x, y + r * (o - 0.4)); ctx.lineTo(x + r * 0.8, y + r * (o + 0.4));
+      }
+      ctx.stroke();
+    } else if (kind === 'shield') {
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r * 0.85, y - r * 0.6);
+      ctx.quadraticCurveTo(x + r * 0.85, y + r * 0.6, x, y + r);
+      ctx.quadraticCurveTo(x - r * 0.85, y + r * 0.6, x - r * 0.85, y - r * 0.6);
+      ctx.closePath();
+      ctx.stroke();
+    } else {
+      ctx.moveTo(x - r * 0.5, y); ctx.lineTo(x + r * 0.5, y);
+      ctx.stroke();
+    }
+  }
+
+  function drawBonus() {
+    const b = bonus;
+    ctx.fillStyle = `rgba(2,3,7,${0.78 * clamp(b.t * 4, 0, 1)})`;
+    ctx.fillRect(-40, -40, W + 80, H + 80);
+    ctx.textAlign = 'center';
+    const top = b.tiles[0].y;
+    ctx.fillStyle = 'rgb(230,196,106)';
+    ctx.font = `700 ${Math.round(22 * U)}px ${FONT}`;
+    ctx.fillText('A MEMORY SURFACES', field.cx, top - 44 * U);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = `600 ${Math.round(13 * U)}px ${FONT}`;
+    const picked = b.picked >= 0 ? b.tiles[b.picked] : null;
+    ctx.fillText(picked ? (picked.open > 0.5 ? PRIZES[picked.prize].label.toUpperCase() + (picked.prize === 'score' ? ' +' + 500 * level : '') : '') : 'TAP ONE SCREEN', field.cx, top - 20 * U);
+    b.tiles.forEach((tile, i) => {
+      const appear = ease(clamp(b.t * 3 - i * 0.12, 0, 1));
+      const mine = i === b.picked, p = PRIZES[tile.prize];
+      const flip = tile.open; // 0 closed .. 1 open; squash horizontally through the middle
+      const sx = Math.abs(1 - flip * 2) * 0.96 + 0.04;
+      const showFace = flip > 0.5;
+      ctx.save();
+      ctx.translate(tile.x + tile.w / 2, tile.y + tile.h / 2);
+      ctx.scale(sx * appear, appear);
+      ctx.globalAlpha = appear * (showFace && !mine ? 0.55 : 1);
+      ctx.fillStyle = showFace ? '#0c0e16' : '#14100a';
+      ctx.strokeStyle = mine ? 'rgb(230,196,106)' : showFace ? `rgba(${p.rgb},0.7)` : 'rgba(230,196,106,0.55)';
+      ctx.lineWidth = (mine ? 3.5 : 1.8) * U;
+      ctx.beginPath();
+      ctx.roundRect(-tile.w / 2, -tile.h / 2, tile.w, tile.h, 8 * U);
+      ctx.fill();
+      ctx.stroke();
+      if (showFace) {
+        prizeIcon(tile.prize, 0, -tile.h * 0.1, tile.h * 0.22, p.rgb);
+        ctx.fillStyle = `rgb(${p.rgb})`;
+        ctx.font = `600 ${Math.round(10.5 * U)}px ${FONT}`;
+        const words = tile.prize === 'score' ? '+' + 500 * level : tile.prize === 'shield' ? 'Shield' : tile.prize === 'skip' ? 'Skip seat' : tile.prize === 'time' ? 'Full time' : 'Nothing';
+        ctx.fillText(words.toUpperCase(), 0, tile.h * 0.36);
+      } else {
+        // closed screens flicker like the wall in the corridor
+        ctx.fillStyle = `rgba(230,196,106,${0.1 + 0.08 * Math.sin(time * 5 + i * 1.7)})`;
+        for (let k = 0; k < 4; k++) ctx.fillRect(-tile.w * 0.4, -tile.h * 0.32 + k * tile.h * 0.2, tile.w * 0.8, tile.h * 0.06);
+        ctx.fillStyle = 'rgba(230,196,106,0.95)';
+        ctx.font = `700 ${Math.round(tile.h * 0.36)}px ${FONT}`;
+        ctx.fillText(TOUCH ? '?' : String(i + 1), 0, tile.h * 0.13);
+      }
+      ctx.restore();
+    });
+    ctx.globalAlpha = 1;
   }
 
   function drawThumb(x, y, pressed, alpha) {
@@ -1079,6 +1278,14 @@
       ctx.fillText(t.text, clamp(t.x, 70, W - 70), t.y);
     }
 
+    if (shield > 0) {
+      ctx.strokeStyle = `rgba(${PRIZES.shield.rgb},0.9)`;
+      ctx.lineWidth = 2.5 * U;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 40 * U, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.stroke();
+    }
+    if (mode === 'bonus' && bonus) drawBonus();
     if (combo >= 3 && mode === 'play') {
       ctx.textAlign = 'left';
       ctx.font = `${Math.round(15 * U)}px ${FONT}`;
@@ -1093,6 +1300,7 @@
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
     if (mode === 'play' || mode === 'interlude') update(dt);
+    else if (mode === 'bonus') updateBonus(dt);
     else if (mode === 'intro') {
       time += dt;
       introT += dt;
@@ -1137,6 +1345,11 @@
   canvas.addEventListener('pointerdown', (e) => {
     initAudio();
     initHaptics();
+    if (mode === 'bonus' && bonus) {
+      const i = bonus.tiles.findIndex((q) => e.clientX >= q.x && e.clientX <= q.x + q.w && e.clientY >= q.y && e.clientY <= q.y + q.h);
+      if (i >= 0) pickBonus(i);
+      return;
+    }
     if (ptr || e.button > 0) return;
     buzz(HAPTIC.touch);
     ptr = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), done: false };
@@ -1190,6 +1403,7 @@
     if (mode === 'title') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startIntro(); } return; }
     if (mode === 'over') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
+    if (mode === 'bonus') { if (k >= '1' && k <= '6') pickBonus(+k - 1); return; }
     if (k === 'ArrowUp' || k === 'w' || k === 'W') { e.preventDefault(); gesture('up'); }
     else if (k === 'ArrowDown' || k === 's' || k === 'S') { e.preventDefault(); gesture('down'); }
     else if (k === ' ') { e.preventDefault(); if (mode === 'pause') togglePause(); else gesture('like'); }

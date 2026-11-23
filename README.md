@@ -34,6 +34,13 @@ from the trailer that adds one complication on top of the last:
 After Seat VII the game continues in faster cycles. Story text is kept in the `WORLDS`, `INTRO`
 and `ELEMENTS` tables at the top of `game.js`.
 
+## Interval act: Memories
+
+Once per seat a golden Memory signal comes down the lane. Any move opens it. The run pauses
+and a wall of six screens appears; tap one, see what it held, then watch the other five open.
+Behind them: skip to the next seat, full time, a score bonus, a shield that forgives one
+mistake, and two empty screens. A Memory you fail to touch simply fades, with no penalty.
+
 ## Feel and sound
 
 - **Haptics:** every event has its own light vibration: touch, tap, swipe, each kind of hit, a
