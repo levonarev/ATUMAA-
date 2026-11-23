@@ -30,10 +30,10 @@
 <header id="hud" hidden>
   <div class="hud-left">
     <div id="grove">Seat I</div>
-    <div id="pips" aria-label="Signals answered at this seat"></div>
+    <div id="pips" aria-label="Progress through this seat"></div>
   </div>
   <div class="hud-mid">
-    <div class="light-label">Time <span id="clock">5:21</span></div>
+    <div class="light-label">Signal<span id="clock"></span></div>
     <div class="light-track"><div id="light"></div></div>
   </div>
   <div class="hud-right">
@@ -55,11 +55,12 @@
     <h1>ATUMAA</h1>
     <p class="tagline">The Seventh Seat</p>
     <canvas id="glyph-title" class="glyph" width="192" height="192" title="Hear the signal" hidden></canvas>
-    <p id="premise" class="premise">November 2026. Asteroid 1998 KY26 is accelerating. Six people heard its signal. There are seven seats. Answer it.</p>
-    <button id="btn-start" class="primary" type="button">Begin</button>
-    <button id="btn-daily" class="secondary" type="button">Today's signal</button>
+    <div class="seats" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <p id="premise" class="premise">Six heard the signal. The seventh seat is yours.</p>
+    <button id="btn-start" class="primary" type="button">Answer the signal</button>
+    <button id="btn-daily" class="secondary" type="button">Today's transmission</button>
     <button id="btn-signal" class="secondary" type="button">Send a signal</button>
-    <p class="controls">A ten-second briefing shows every move. You play it the way you scroll reels: swipe up, swipe down, double-tap, hold. Keyboard: ↑ ↓ Space, hold Shift.</p>
+    <p class="controls">Asteroid 1998 KY26 is accelerating. You answer it the way you scroll reels, with one thumb.</p>
     <p id="best-title" class="best"></p>
   </div>
 </section>
@@ -99,12 +100,13 @@
     <button id="btn-share" class="primary" type="button">Share this run</button>
     <p id="share-note" class="controls"></p>
     <button id="btn-again" class="primary" type="button">Try again</button>
-    <button id="btn-daily2" class="secondary" type="button">Today's signal</button>
+    <button id="btn-daily2" class="secondary" type="button">Today's transmission</button>
     <button id="btn-compose" class="secondary" type="button">Send a signal of your own</button>
     <button id="btn-free" class="secondary" type="button" hidden>Free play</button>
   </div>
 </section>
 
+<button id="btn-endless" class="primary" type="button" hidden>Continue in endless</button>
 <div id="rotate"><p>Turn your phone upright to play</p></div>
 
 <script src="game.js"></script>
