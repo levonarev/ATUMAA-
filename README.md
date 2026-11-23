@@ -71,6 +71,21 @@ order and timing for everyone who opens the link, with no time meter, prizes or 
 The link carries the sender's result (`&p=<score>&r=<answered>`), so the recipient sees
 "A friend answered 12 of 13" and the end screen compares the two and offers a rematch.
 
+## Beyond the seventh seat: aiming
+
+After the ending the game goes on to three more seats where signals come down separate lanes
+and a move only counts in the lane it is made in. Where the thumb lands is the aim; on a
+keyboard, ← → move the aim. A move in an empty lane costs a little signal, and a Gap is only
+dangerous in its own lane. Speed and the mix of signals drop back when aiming is introduced.
+
+| Seat | World | Adds |
+| --- | --- | --- |
+| VIII | The Field | Two lanes, slow, simple signals |
+| IX | The Shore | Three lanes; bound and mirrored signals return |
+| X | The Answer | Everything, and sometimes two signals at once |
+
+After Seat X the last seat repeats in faster cycles.
+
 ## Daily streak and the board
 
 - **Daily streak:** finishing today's transmission extends a streak kept on the device; missing
