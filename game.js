@@ -559,7 +559,7 @@
   function dailyBest(d) { try { return parseInt(localStorage.getItem('atumaa.daily.' + d) || '0', 10) || 0; } catch (e) { return 0; } }
   function playDaily() {
     signal = dailySignal();
-    if (best > 0) startGame(); else startIntro();
+    startGame();
   }
 
   function signalUrl(sig, mark) {
@@ -651,7 +651,7 @@
   function playDraft() {
     if (!draft) return;
     signal = draft;
-    if (best > 0) startGame(); else startIntro();
+    startGame();
   }
 
   let overLine = '';
@@ -1057,7 +1057,7 @@
       setMode('play');
       spawnTimer = Math.max(spawnTimer, 0.7);
       last = performance.now();
-      if (prize === 'skip') { cleared = goal; startInterlude(); }
+      if (prize === 'skip') { cleared = goal; if (level === 7) startEnding(); else startInterlude(); }
     }
   }
 
@@ -2318,7 +2318,7 @@
       else if (k === 'Escape') setMode(composeFrom);
       return;
     }
-    if (mode === 'title') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startIntro(); } return; }
+    if (mode === 'title') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'over') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
     if (mode === 'bonus') { if (k >= '1' && k <= '6') pickBonus(+k - 1); return; }
@@ -2335,7 +2335,8 @@
   window.addEventListener('blur', () => { keyHold = false; endHold(); if (mode === 'play') setMode('pause'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
 
-  $('btn-start').addEventListener('click', startIntro);
+  $('btn-start').addEventListener('click', startGame);
+  $('btn-how').addEventListener('click', startIntro);
   $('btn-again').addEventListener('click', startGame);
   $('btn-resume').addEventListener('click', togglePause);
   $('btn-pause').addEventListener('click', togglePause);
