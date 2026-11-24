@@ -31,9 +31,11 @@ from the trailer that adds one complication on top of the last:
 | VI | The Corridor | Inside | Mirrored signals (swipe the opposite way) |
 | VII | The Seventh Seat | The chamber | Cloaked signals (revealed late) |
 
-The first time a seat is reached, a story card appears before the signals: a still from the
+The first time a seat is reached (and never again automatically), a story card appears before the signals: a still from the
 film (`story/1.jpg` to `story/10.jpg`), the date and two or three lines of story. The text lives
-in the `WORLDS` table at the top of `game.js`. A fall is not the end of a run: the seat can be
+in the `WORLDS` table at the top of `game.js`. Cards move on by themselves after seven seconds
+(four and a half for Seats VIII–X, which come after the ending) or on a tap, and the current
+seat's card can be reopened from the pause screen. A fall is not the end of a run: the seat can be
 replayed up to three times, with the score put back to what it was at the start of that seat.
 `?seat=8` (any number from 1 to 10) starts a run at that seat, and the title screen has a
 link straight to the aiming seats.
@@ -75,6 +77,7 @@ silence to let pass.
 
 Any signal run, daily or sent by a friend, is a transmission: thirteen signals, identical in
 order and timing for everyone who opens the link, with no time meter, prizes or interval acts.
+They are always played in the listening room.
 The link carries the sender's result (`&p=<score>&r=<answered>`), so the recipient sees
 "A friend answered 12 of 13" and the end screen compares the two and offers a rematch.
 
@@ -97,9 +100,11 @@ After Seat X the last seat repeats in faster cycles.
 
 - **Daily streak:** finishing today's transmission extends a streak kept on the device; missing
   a day resets it. It shows on the end screen and on the title button.
-- **The seventh seat today:** a worldwide board for today's transmission. It needs the small
-  server in `backend/` (a Cloudflare Worker; see `backend/README.md`). Until that server's
-  address is put in `BOARD_URL` in `game.js`, the board is hidden and nothing is sent anywhere.
+- **Board (not switched on):** the code for a shared board of today's transmission exists
+  (`backend/` and a hidden panel on the end screen), but `BOARD_URL` in `game.js` is empty, so
+  nothing is shown and nothing is sent. It has only been run against a local copy of the
+  server. Do not describe the game as having a public board until the server is deployed and a
+  name posted from one phone has been seen on another.
 
 ## The ending
 
