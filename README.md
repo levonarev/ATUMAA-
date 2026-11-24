@@ -135,6 +135,16 @@ Both endings can be shared. Play continues from each.
 - **Link previews:** `og.png`, `manifest.webmanifest` and the app icons give shared links a
   proper card and let the game be added to a home screen.
 
+## Analytics
+
+GoatCounter (`atumaa.goatcounter.com`): no cookies, no personal data. Besides page views the
+game reports events, all prefixed `event/`: `run/…` (campaign, daily, signal-own,
+signal-friend), `first-move`, `seat/01`–`seat/10`, `fell/seat-NN`, `finished/…`,
+`next/…` (replay-seat, play-seat-again, start-from-one, rematch), `signal/composed`,
+`signal/sent`, `opened/…-link`, `share/…`, `ending/…`, `collection/open`, and
+`played/1min`, `3min`, `7min`, `15min` as each mark of time spent playing is passed.
+GoatCounter does not time sessions itself, so those four marks are how session length is read.
+
 ## Keeping a session going
 
 - **Gentler first seats.** In Seats I–III the meter drains more slowly, mistakes and misses
