@@ -126,12 +126,14 @@ first seats than later. A Gap appears once in Seat I so it is met early.
 
 ## Soundtrack
 
-Music by Project LA, in `music/`. One track per stretch of the story, cross-faded at seat
-changes: *Prelude* (Seats I–III and transmissions), *Dance of Marionettes* (Seats IV–VII and
-the ending), *After Words* (Seats VIII–X). The music drops low while a Gap leads, during the
-timing acts and on the end screen. The sounds the player makes are tuned to each track's key
-(`TRACKS` in `game.js`), so answers play in tune over the music. The synthesised loop remains
-only as a fallback if a track cannot load.
+Music by Project LA, in `music/`: *Prelude*, *Dance of Marionettes*, *The Curtains* and
+*After Words*. A run starts with the track that suits its seat (Prelude for Seats I–III,
+Dance of Marionettes for IV–VI, The Curtains for VII, After Words for VIII–X). Tracks are
+never looped: when one ends, the next unheard one begins, preferring the one that suits the
+current seat, and the list only starts again after all four have played. The music is kept
+quiet (`MUSIC_LEVEL`), evened out between recordings (`trim`), and drops further while a Gap
+leads, during the timing acts and on the end screen. The sounds the player makes are tuned
+to each track's key. The synthesised loop remains only as a fallback.
 
 ## Feel and sound
 
