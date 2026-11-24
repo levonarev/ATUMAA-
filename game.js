@@ -97,6 +97,32 @@
     };
   }
 
+  /* ---------- Analytics (GoatCounter: no cookies, no personal data) ---------- */
+  // Events are named like paths so they group on the dashboard. If the counter has not loaded
+  // yet (or is blocked) they wait in a short queue; nothing here can break the game.
+  const trackQ = [], tracked = new Set();
+  let playSec = 0, trackTick = 0;
+  function track(path, once) {
+    if (once) { if (tracked.has(path)) return; tracked.add(path); }
+    if (trackQ.length < 40) trackQ.push(path);
+    flushTrack();
+  }
+  function flushTrack() {
+    const gc = window.goatcounter;
+    if (!gc || typeof gc.count !== 'function') return;
+    while (trackQ.length) {
+      const path = trackQ.shift();
+      try { gc.count({ path: 'event/' + path, title: path, event: true }); } catch (e) { /* never let counting interrupt play */ }
+    }
+  }
+  // time actually spent playing, reported as each mark is passed
+  function trackTime(dt) {
+    playSec += dt;
+    for (const [sec, name] of [[60, '1min'], [180, '3min'], [420, '7min'], [900, '15min']]) if (playSec >= sec) track('played/' + name, true);
+    trackTick += dt;
+    if (trackTick > 1) { trackTick = 0; flushTrack(); }
+  }
+
   /* ---------- Layout ---------- */
   let W = 0, H = 0, U = 1, DPR = 1;
   const field = { cx: 0, top: 64, heartY: 0, path: 0 };
@@ -839,6 +865,7 @@
     buzz(HAPTIC.tap);
     if (taps.length === SIG_TAPS) {
       draft = makeSignal(codeFromTaps(taps), null, true);
+      track('signal/composed');
       buzz(HAPTIC.seat);
       const made = draft;
       setTimeout(() => { if (mode === 'compose' && draft === made) playMotif(made); }, 600);
@@ -851,6 +878,7 @@
     if (!draft) return;
     const url = location.origin + location.pathname + '?s=' + draft.code;
     const text = 'I made a signal for you. Can you answer it?';
+    track('signal/sent');
     const note = (msg) => { ui.composeNote.textContent = msg; };
     const copy = () => {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
@@ -976,7 +1004,7 @@
       ui.tracklist.appendChild(b);
     });
   }
-  function openCollection() { initAudio(); preview = ''; renderCollection(); setMode('collection'); }
+  function openCollection() { track('collection/open'); initAudio(); preview = ''; renderCollection(); setMode('collection'); }
 
   /* ---------- Story ---------- */
   let storyN = 0, storyT = 0, storyHeld = false, retries = 3, seatStartScore = 0;
@@ -1149,6 +1177,7 @@
   }
 
   function shareSignal() {
+    track(txMode ? 'share/challenge' : 'share/run');
     const url = signal ? signalUrl(signal, score) : location.origin + location.pathname;
     const lead = !signal ? '' : signal.daily ? dayLabel(signal.daily) + '. ' : signal.mine ? 'I sent you a signal. Answer it. ' : 'I answered this signal. Your turn. ';
     const text = txMode ? resultLine() : lead + resultLine();
@@ -1249,6 +1278,7 @@
     } else {
       seatStartScore = score;
       reachSeat(n);
+      track('seat/' + String(Math.min(n, 10)).padStart(2, '0'));
       loadStill(n + 1);
       // the first time a seat is reached, its story card comes before the signals
       if (n <= WORLDS.length && !storySeen.has(n)) { loadStill(n); beginStory(n); }
@@ -1289,6 +1319,7 @@
     if (from > 1) guided = false;
     jumped = !!urlSeat; // only a run opened by a ?seat link is kept out of the best score
     playSong(txMode ? 'prelude' : trackFor(from));
+    track('run/' + (!txMode ? 'campaign' : signal.daily ? 'daily' : signal.mine ? 'signal-own' : 'signal-friend'));
     setMode('play');
     setupLevel(txMode ? 3 : from);
   }
@@ -1297,6 +1328,7 @@
   function retrySeat() {
     if (mode !== 'over' || txMode || retries <= 0) return;
     retries--;
+    track('next/replay-seat');
     score = seatStartScore;
     light = 1;
     combo = 0;
@@ -1427,6 +1459,7 @@
   /* ---------- Gestures ---------- */
   function gesture(g) {
     if (mode !== 'play') return;
+    track('first-move', true);
     // the whole world scrolls with the thumb, like a feed
     if (g === 'up') { scrollKick = 1150 * U; jolt = -22 * U; sfx.swish(true); }
     else if (g === 'down') { scrollKick = -850 * U; jolt = 22 * U; sfx.swish(false); }
@@ -1768,6 +1801,7 @@
   // answers with the last phrase the player actually played.
   function startEnding(kind) {
     endKind = kind || 'seat';
+    track('ending/' + endKind);
     ui.endless.textContent = endKind === 'shore' ? 'Keep playing' : 'Go beyond';
     ui.endShare.textContent = 'Share this';
     score += 1400;
@@ -1873,6 +1907,7 @@
   }
 
   function gameOver() {
+    track(!txMode ? 'fell/seat-' + String(Math.min(level, 10)).padStart(2, '0') : 'finished/' + (signal.daily ? 'daily' : signal.mine ? 'signal-own' : 'signal-friend'));
     setMode('over');
     // the campaign best is only set by full campaign runs: not transmissions, not runs begun part-way
     const counts = !txMode && !jumped;
@@ -2914,6 +2949,8 @@
       bannerT -= dt;
       if (bannerT <= 0) ui.banner.hidden = true;
     }
+    if (mode === 'play' || mode === 'interlude' || mode === 'bonus' || mode === 'act' || mode === 'story' || mode === 'ending') trackTime(dt);
+    else if (trackQ.length) flushTrack();
     tickSong(dt);
     updateHud();
     draw();
@@ -3048,10 +3085,10 @@
   ui.restart.addEventListener('click', () => startGame(1));
   ui.collectBtn.addEventListener('click', openCollection);
   $('btn-collection-back').addEventListener('click', () => setMode('title'));
-  ui.fromOne.addEventListener('click', () => { signal = null; startGame(1); });
+  ui.fromOne.addEventListener('click', () => { track('next/start-from-one'); signal = null; startGame(1); });
   ui.retry.addEventListener('click', retrySeat);
   $('btn-how').addEventListener('click', startIntro);
-  $('btn-again').addEventListener('click', () => startGame(txMode ? undefined : level));
+  $('btn-again').addEventListener('click', () => { track(txMode ? 'next/rematch' : 'next/play-seat-again'); startGame(txMode ? undefined : level); });
   $('btn-resume').addEventListener('click', togglePause);
   $('btn-pause').addEventListener('click', togglePause);
   ui.skip.addEventListener('click', startGame);
@@ -3068,6 +3105,7 @@
   ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(level + 1); });
   ui.endShare.addEventListener('click', () => {
     const url = location.origin + location.pathname;
+    track('share/ending');
     const text = endKind === 'shore' ? 'I answered all ten seats in ATUMAA. The one on the shore answered back.' : 'I took the seventh seat in ATUMAA. It was looking for me. Can you take yours?';
     const copy = () => {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => { ui.endShare.textContent = 'Copied'; }, () => {});
@@ -3101,6 +3139,7 @@
   if (best > 0) ui.bestTitle.textContent = 'Best ' + best.toLocaleString();
   // opened from a friend's link: their signal is waiting on the title screen
   signal = signalFromUrl();
+  if (signal) track(signal.daily ? 'opened/daily-link' : signal.theirs ? 'opened/challenge-link' : 'opened/signal-link');
   if (signal) {
     ui.glyphTitle.hidden = false;
     drawGlyph(ui.glyphTitle, signal);
