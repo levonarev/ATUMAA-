@@ -71,7 +71,7 @@
     glyphTitle: $('glyph-title'), glyphCompose: $('glyph-compose'), glyphOver: $('glyph-over'),
     tapPad: $('tap-pad'), composeHint: $('compose-hint'), composeCount: $('compose-count'),
     playSignal: $('btn-play-signal'), redo: $('btn-redo'),
-    overTitle: $('over-title'), daily: $('btn-daily'), daily2: $('btn-daily2'), signalBtn: $('btn-signal'), sound2: $('btn-sound2'), haptic2: $('btn-haptic2'),
+    storyBtn: $('btn-story'), overTitle: $('over-title'), daily: $('btn-daily'), daily2: $('btn-daily2'), signalBtn: $('btn-signal'), sound2: $('btn-sound2'), haptic2: $('btn-haptic2'),
     signalResult: $('signal-result'), share: $('btn-share'), shareNote: $('share-note'), free: $('btn-free'),
   };
 
@@ -81,7 +81,8 @@
   const ease = (k) => 1 - Math.pow(1 - clamp(k, 0, 1), 3);
   const seatOf = (lv) => Math.min(lv, WORLDS.length);
   const LAST = WORLDS.length; // beyond this the last seat repeats in faster cycles
-  const world = () => WORLDS[seatOf(level) - 1];
+  // a transmission borrows Seat III's speed and signals but is always played in the listening room
+  const world = () => WORLDS[txMode ? 0 : seatOf(level) - 1];
 
   // Everything that decides what falls and when draws from rng, so a shared signal
   // replays the same run for whoever opens it. Effects keep using Math.random.
@@ -384,7 +385,7 @@
   function buildBackdrop() {
     // the title screen shows the asteroid; each seat shows its own landmark
     const idle = mode === 'title' || mode === 'compose';
-    const seatIdx = idle ? WORLDS.findIndex((q) => q.art === 'ky26') : seatOf(level) - 1, w = WORLDS[seatIdx];
+    const seatIdx = idle ? WORLDS.findIndex((q) => q.art === 'ky26') : txMode ? 0 : seatOf(level) - 1, w = WORLDS[seatIdx];
     // fixed ground with a lit lane up the middle
     ground = document.createElement('canvas');
     ground.width = canvas.width;
@@ -449,12 +450,14 @@
   /* ---------- Soundtrack: Project LA ---------- */
   // One track per stretch of the story. `tonic` is the track's key note, so the sounds the
   // player makes (answers, the call and reply, fanfares) are tuned to sit inside the music.
-  // `trim` evens out how loud the recordings are, so no track jumps out over the others.
+  // `trim` evens out the recordings so none jumps out. It is matched on each track's loudest
+  // passages (not its average), weighted toward the range a phone speaker reproduces, and
+  // never boosts: the quietest recording plays at 1 and the others are brought down to it.
   const TRACKS = {
-    prelude: { src: 'music/prelude.mp3', tonic: 440.0, trim: 0.82 },            // A
-    marionettes: { src: 'music/marionettes.mp3', tonic: 493.88, trim: 0.98 },   // B
-    curtains: { src: 'music/curtains.mp3', tonic: 440.0, trim: 0.62 },          // A
-    afterwords: { src: 'music/afterwords.mp3', tonic: 392.0, trim: 1.3 },       // G
+    prelude: { src: 'music/prelude.mp3', tonic: 440.0, trim: 0.77 },            // A
+    marionettes: { src: 'music/marionettes.mp3', tonic: 493.88, trim: 0.89 },   // B
+    curtains: { src: 'music/curtains.mp3', tonic: 440.0, trim: 0.61 },          // A
+    afterwords: { src: 'music/afterwords.mp3', tonic: 392.0, trim: 1.0 },       // G
   };
   const ORDER = ['prelude', 'marionettes', 'curtains', 'afterwords'];
   const MUSIC_LEVEL = 0.3; // kept well under the game's own sounds
@@ -907,7 +910,7 @@
   }
 
   /* ---------- Story ---------- */
-  let storyN = 0, storyT = 0, retries = 3, seatStartScore = 0;
+  let storyN = 0, storyT = 0, storyHeld = false, retries = 3, seatStartScore = 0;
   const storyImg = {}, storySeen = new Set();
   try { (localStorage.getItem('atumaa.story') || '').split(',').forEach((v) => { if (v) storySeen.add(+v); }); } catch (e) { /* storage blocked */ }
   function loadStill(n) {
@@ -916,9 +919,10 @@
     im.src = 'story/' + n + '.jpg';
     storyImg[n] = im;
   }
-  function beginStory(n) {
+  function beginStory(n, held) {
     storyN = n;
     storyT = 0;
+    storyHeld = !!held; // reopened by the player: stays until tapped
     storySeen.add(n);
     try { localStorage.setItem('atumaa.story', [...storySeen].join(',')); } catch (e) { /* storage blocked */ }
     setMode('story');
@@ -1218,6 +1222,7 @@
     const playing = m === 'play' || m === 'interlude';
     ui.title.hidden = m !== 'title';
     ui.compose.hidden = m !== 'compose';
+    if (m === 'pause') ui.storyBtn.hidden = txMode;
     ui.endless.hidden = true;
     if (m === 'title') {
       const fresh = !played, run = liveStreak();
@@ -2175,7 +2180,7 @@
     ctx.ellipse(hx, hy + 6 * U, field.path * 0.8, 14 * U, 0, 0, TAU);
     ctx.stroke();
     // seven marks around the core, lit for each seat reached
-    const lit = Math.min(7, seatOf(level));
+    const lit = txMode ? 0 : Math.min(7, seatOf(level));
     for (let i = 0; i < 7; i++) {
       const a = -Math.PI / 2 + (i / 7) * TAU + time * 0.25;
       ctx.fillStyle = i < lit ? `rgba(${acc},0.95)` : 'rgba(255,255,255,0.16)';
@@ -2670,7 +2675,7 @@
     if (mode === 'play' || mode === 'interlude') { if (hitStop > 0) hitStop -= dt; else update(dt); music(); }
     else if (mode === 'bonus') updateBonus(dt);
     else if (mode === 'act') updateAct(dt);
-    else if (mode === 'story') { time += dt; storyT += dt; if (storyT > 7) endStory(); }
+    else if (mode === 'story') { time += dt; storyT += dt; if (!storyHeld && storyT > (storyN > 7 ? 4.5 : 7)) endStory(); } // shorter once the ending has been seen
     else if (mode === 'ending') { time += dt; endT += dt; scrollY += H * 0.04 * dt; if (endT > 8.2 && ui.endless.hidden) ui.endless.hidden = false; }
     else if (mode === 'intro') {
       time += dt;
@@ -2826,6 +2831,7 @@
   ui.haptic2.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.daily.addEventListener('click', playDaily);
   ui.daily2.addEventListener('click', playDaily);
+  ui.storyBtn.addEventListener('click', () => { if (mode === 'pause' && !txMode) { loadStill(seatOf(level)); beginStory(seatOf(level), true); } });
   ui.post.addEventListener('click', postBoard);
   try { ui.boardName.value = cleanName(localStorage.getItem('atumaa.name')); } catch (e) { /* storage blocked */ }
   ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(8); });
