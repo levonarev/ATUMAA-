@@ -673,7 +673,7 @@
     empty: { label: 'Nothing here', rgb: '150,155,170' },
   };
   let bonus = null;      // {tiles:[{x,y,w,h,prize,open}], picked, t, pickT, applied}
-  let bonusAt = -1, bonusDone = false, shield = 0, memories = 0;
+  let bonusAt = -1, bonusDone = false, shield = 0, memories = 0, lastLayout = '';
   const ACTS = ['memory', 'metro', 'heart']; // one interval act per seat, in rotation
   let act = null;        // the running metronome or heartbeat act
 
@@ -1395,14 +1395,39 @@
     targets.splice(targets.indexOf(t), 1);
     memories++;
     burst(x, y, '230,196,106', 30, 320);
-    const cols = W > H ? 3 : 2, rows = 6 / cols;
-    const tw = Math.min(150 * U, (W - 48) / cols - 12), th = tw * 0.72, gap = 12 * U;
-    const x0 = field.cx - (cols * tw + (cols - 1) * gap) / 2;
-    const y0 = Math.max(field.top + 96 * U, H * 0.5 - (rows * th + (rows - 1) * gap) / 2);
     const kinds = ['skip', 'time', 'score', 'shield', 'empty', 'empty'];
     // always a real gamble: the wall is shuffled afresh, even on a shared signal
     for (let i = kinds.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
-    bonus = { tiles: kinds.map((prize, i) => ({ prize, open: 0, x: x0 + (i % cols) * (tw + gap), y: y0 + Math.floor(i / cols) * (th + gap), w: tw, h: th })), picked: -1, t: 0, pickT: 0, applied: false };
+
+    // The screens themselves are laid out differently each time (a loose grid, a ring or a
+    // zigzag) and are seen to swap places before they settle, so the shuffle is visible.
+    const cols = W > H ? 3 : 2, rows = 6 / cols, gap = 12 * U;
+    const full = Math.min(150 * U, (W - 48) / cols - 12);
+    const cx = field.cx, cy = Math.max(field.top + 96 * U + (rows * full * 0.72 + (rows - 1) * gap) / 2, H * 0.5);
+    let layout;
+    do { layout = ['grid', 'ring', 'zigzag'][(Math.random() * 3) | 0]; } while (layout === lastLayout);
+    lastLayout = layout;
+    const k = layout === 'ring' ? 0.8 : layout === 'zigzag' ? 0.9 : 1, tw = full * k, th = tw * 0.72;
+    const slots = [];
+    if (layout === 'ring') {
+      // a hexagon: upright on a phone, on its side on a wide screen, sized so no two screens touch
+      const rx = cols === 2 ? Math.min((W - tw) / 2 - 12, 150 * U) : Math.max(tw * 2.1, Math.min(W * 0.3, 270 * U)), ry = th * (cols === 2 ? 2.12 : 1.3), a0 = cols === 2 ? Math.PI / 6 : 0;
+      for (let i = 0; i < 6; i++) slots.push([cx + Math.cos(a0 + (i * TAU) / 6) * rx, cy + Math.sin(a0 + (i * TAU) / 6) * ry]);
+    } else {
+      const lean = layout === 'zigzag' ? (Math.random() < 0.5 ? -1 : 1) * Math.min(16 * U, (W - 24 - cols * tw - (cols - 1) * gap) / 2) : 0;
+      for (let i = 0; i < 6; i++) {
+        const c = i % cols, r = Math.floor(i / cols);
+        slots.push([cx + (c - (cols - 1) / 2) * (tw + gap) + (r % 2 ? lean : -lean) + rand(-5, 5) * U, cy + (r - (rows - 1) / 2) * (th + gap) + rand(-5, 5) * U]);
+      }
+    }
+    const via = [0, 1, 2, 3, 4, 5];
+    for (let i = 5; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [via[i], via[j]] = [via[j], via[i]]; }
+    bonus = {
+      tiles: kinds.map((prize, i) => ({ prize, open: 0, w: tw, h: th, x: slots[i][0] - tw / 2, y: slots[i][1] - th / 2, vx: slots[via[i]][0], vy: slots[via[i]][1], rot: rand(-0.07, 0.07) })),
+      picked: -1, t: 0, pickT: 0, applied: false, cx, cy, top: Math.min(...slots.map((q) => q[1])) - th / 2,
+    };
+    noise(0.12, 0.05, 1800, 0.05, 0.8);
+    noise(0.12, 0.05, 2400, 0.5, 0.8);
     ptr = null; dragY = 0; endHold();
     setMode('bonus');
     [659.25, 987.77, 1318.5].forEach((f, i) => tone(f, 0.4, 'sine', 0.07, i * 0.09));
@@ -1410,7 +1435,7 @@
   }
 
   function pickBonus(i) {
-    if (!bonus || bonus.picked >= 0 || bonus.t < 0.45) return;
+    if (!bonus || bonus.picked >= 0 || bonus.t < 1.05) return; // not until the screens have settled
     bonus.picked = i;
     bonus.pickT = bonus.t;
     sfx.tap();
@@ -2199,22 +2224,26 @@
     ctx.fillStyle = `rgba(2,3,7,${0.78 * clamp(b.t * 4, 0, 1)})`;
     ctx.fillRect(-40, -40, W + 80, H + 80);
     ctx.textAlign = 'center';
-    const top = b.tiles[0].y;
+    const top = b.top;
     ctx.fillStyle = 'rgb(230,196,106)';
     ctx.font = `700 ${Math.round(22 * U)}px ${FONT}`;
     ctx.fillText('A MEMORY SURFACES', field.cx, top - 44 * U);
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = `600 ${Math.round(13 * U)}px ${FONT}`;
     const picked = b.picked >= 0 ? b.tiles[b.picked] : null;
-    ctx.fillText(picked ? (picked.open > 0.5 ? PRIZES[picked.prize].label.toUpperCase() + (picked.prize === 'score' ? ' +' + 500 * level : '') : '') : 'TAP ONE SCREEN', field.cx, top - 20 * U);
+    ctx.fillText(picked ? (picked.open > 0.5 ? PRIZES[picked.prize].label.toUpperCase() + (picked.prize === 'score' ? ' +' + 500 * level : '') : '') : b.t < 1.05 ? 'SHUFFLING' : 'TAP ONE SCREEN', field.cx, top - 20 * U);
     b.tiles.forEach((tile, i) => {
-      const appear = ease(clamp(b.t * 3 - i * 0.12, 0, 1));
+      const appear = ease(clamp(b.t * 4, 0, 1));
+      // dealt from the middle to a first place, then swapped across to where it will stay
+      const k1 = ease(clamp(b.t / 0.42, 0, 1)), k2 = ease(clamp((b.t - 0.5) / 0.5, 0, 1));
+      const px = lerp(lerp(b.cx, tile.vx, k1), tile.x + tile.w / 2, k2), py = lerp(lerp(b.cy, tile.vy, k1), tile.y + tile.h / 2, k2);
       const mine = i === b.picked, p = PRIZES[tile.prize];
       const flip = tile.open; // 0 closed .. 1 open; squash horizontally through the middle
       const sx = Math.abs(1 - flip * 2) * 0.96 + 0.04;
       const showFace = flip > 0.5;
       ctx.save();
-      ctx.translate(tile.x + tile.w / 2, tile.y + tile.h / 2);
+      ctx.translate(px, py);
+      ctx.rotate(tile.rot * k2 + (1 - k2) * Math.sin(b.t * 14 + i) * 0.12);
       ctx.scale(sx * appear, appear);
       ctx.globalAlpha = appear * (showFace && !mine ? 0.55 : 1);
       ctx.fillStyle = showFace ? '#0c0e16' : '#14100a';
