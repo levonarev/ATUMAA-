@@ -60,8 +60,7 @@
     <button id="btn-start" class="primary" type="button">Answer the signal</button>
     <button id="btn-daily" class="secondary" type="button">Today's transmission</button>
     <button id="btn-signal" class="secondary" type="button">Send a signal</button>
-    <p class="controls">Asteroid 1998 KY26 is accelerating. You answer it the way you scroll reels, with one thumb.</p>
-    <button id="btn-aim" class="linkish" type="button">Jump to the aiming seats (Seat VIII)</button>
+    <p class="controls">Swipe to answer. Wait for the glow to score higher. Let the silence pass.</p>
     <button id="btn-how" class="linkish" type="button">How to play</button>
     <p id="best-title" class="best"></p>
     <p class="credit">Music by Project LA</p>
@@ -76,7 +75,9 @@
     </button>
     <p id="compose-count" class="best">0 / 6</p>
     <p id="compose-hint" class="controls">Tap the ring six times, in any rhythm. That rhythm is your signal.</p>
-    <button id="btn-play-signal" class="primary" type="button" hidden>Play it</button>
+    <button id="btn-send-signal" class="primary" type="button" hidden>Send my signal</button>
+    <button id="btn-play-signal" class="secondary" type="button" hidden>Set a score to beat</button>
+    <p id="compose-note" class="controls"></p>
     <button id="btn-redo" class="secondary" type="button" hidden>Tap it again</button>
     <button id="btn-back" class="secondary" type="button">Back</button>
   </div>
@@ -86,7 +87,8 @@
   <div class="panel small">
     <h2>Paused</h2>
     <button id="btn-resume" class="primary" type="button">Resume</button>
-    <button id="btn-sound2" class="secondary" type="button">Sound: on</button>
+    <button id="btn-music2" class="secondary" type="button">Music: on</button>
+    <button id="btn-sound2" class="secondary" type="button">Effects: on</button>
     <button id="btn-haptic2" class="secondary" type="button">Vibration: on</button>
     <button id="btn-story" class="secondary" type="button">This seat's story</button>
   </div>
@@ -99,6 +101,7 @@
     <p id="final-detail" class="controls"></p>
     <dl id="final-stats"></dl>
     <p id="best-over" class="best"></p>
+    <p id="final-tip" class="tip" hidden></p>
     <canvas id="glyph-over" class="glyph" width="192" height="192" hidden></canvas>
     <p id="signal-result" hidden></p>
     <button id="btn-retry" class="primary" type="button" hidden>Replay this seat</button>
@@ -121,6 +124,7 @@
   </div>
 </section>
 
+<button id="btn-endshare" class="secondary" type="button" hidden>Share this</button>
 <button id="btn-endless" class="primary" type="button" hidden>Go beyond</button>
 <div id="rotate"><p>Turn your phone upright to play</p></div>
 

@@ -96,6 +96,16 @@ dangerous in its own lane. Speed and the mix of signals drop back when aiming is
 
 After Seat X the last seat repeats in faster cycles.
 
+## Sending a signal
+
+After six taps the composer offers **Send my signal** (the rhythm goes out as it is, with no
+score) and **Set a score to beat** (play it first). A friend's signal is heard once in the
+rhythm it was tapped before it begins, and again when it ends. Someone who has never played
+gets four practice signals first (swipe up, swipe down, double-tap, a silence); these sit
+outside the numbered sequence, so both players still face the identical thirteen. The composer
+is on the title screen from the first visit. The campaign best is only set by full campaign
+runs, not by transmissions or by runs begun part-way with `?seat=N`.
+
 ## Daily streak and the board
 
 - **Daily streak:** finishing today's transmission extends a streak kept on the device; missing
@@ -106,10 +116,12 @@ After Seat X the last seat repeats in faster cycles.
   server. Do not describe the game as having a public board until the server is deployed and a
   name posted from one phone has been seen on another.
 
-## The ending
+## The endings
 
 Clearing Seat VII stops the action: the signal goes back, six seats answer one by one, and the
-seventh answers with the last notes the player played. Endless play continues from there.
+seventh answers with the last notes the player played. The Curtains is brought in for this
+scene unless it has already been heard. Clearing Seat X has a close of its own, on the shore.
+Both endings can be shared. Play continues from each.
 
 ## Today's signal and sharing
 
