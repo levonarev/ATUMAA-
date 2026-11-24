@@ -71,7 +71,7 @@
     glyphTitle: $('glyph-title'), glyphCompose: $('glyph-compose'), glyphOver: $('glyph-over'),
     tapPad: $('tap-pad'), composeHint: $('compose-hint'), composeCount: $('compose-count'),
     playSignal: $('btn-play-signal'), redo: $('btn-redo'),
-    storyBtn: $('btn-story'), overTitle: $('over-title'), daily: $('btn-daily'), daily2: $('btn-daily2'), signalBtn: $('btn-signal'), sound2: $('btn-sound2'), haptic2: $('btn-haptic2'),
+    storyBtn: $('btn-story'), overTitle: $('over-title'), daily: $('btn-daily'), daily2: $('btn-daily2'), signalBtn: $('btn-signal'), sound2: $('btn-sound2'), music2: $('btn-music2'), sendSignal: $('btn-send-signal'), composeNote: $('compose-note'), tip: $('final-tip'), endShare: $('btn-endshare'), haptic2: $('btn-haptic2'),
     signalResult: $('signal-result'), share: $('btn-share'), shareNote: $('share-note'), free: $('btn-free'),
   };
 
@@ -439,7 +439,8 @@
   }
 
   /* ---------- Audio ---------- */
-  let ac = null, muted = false;
+  let ac = null, muted = false, musicOff = false; // muted silences the game's own sounds; musicOff the soundtrack
+  try { musicOff = localStorage.getItem('atumaa.music') === 'off'; } catch (e) { /* storage blocked */ }
   function initAudio() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); unlockSong(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -519,7 +520,7 @@
     const live = mode === 'play' || mode === 'interlude' || mode === 'story' || mode === 'bonus' || mode === 'act' || mode === 'ending' || mode === 'over';
     const lead = mode === 'play' ? front() : null;
     // full in play; hushed while a silence leads, during the timing acts and on the end screen
-    let want = muted || !live ? 0 : mode === 'act' ? 0.2 : mode === 'bonus' ? 0.45 : mode === 'over' ? 0.6 : lead && lead.shade ? 0.25 : 1;
+    let want = musicOff || !live ? 0 : mode === 'act' ? 0.2 : mode === 'ending' ? 0.5 : mode === 'bonus' ? 0.45 : mode === 'over' ? 0.6 : lead && lead.shade ? 0.25 : 1;
     const swap = songWant && songWant !== songName;
     if (swap) want = 0;
     songVol += clamp(want - songVol, -dt * 2.2, dt * 1.1);
@@ -614,7 +615,7 @@
   const ROOTS = [110, 98, 82.41, 73.42, 110, 92.5, 65.41, 87.31, 98, 73.42];
   let musicNext = 0, musicStep = 0;
   function music() {
-    if (!ac || muted || songOn()) { musicNext = 0; return; } // the synth loop is only a fallback now
+    if (!ac || muted || musicOff || songOn()) { musicNext = 0; return; } // the synth loop is only a fallback now
     const step = 60 / (96 + 2 * Math.min(level, 8)) / 2; // eighth notes
     if (!musicNext || musicNext < ac.currentTime - 0.3) musicNext = ac.currentTime + 0.05;
     const lead = front(), hush = !!(lead && lead.shade); // the sound falls away while a silence leads
@@ -807,9 +808,11 @@
     drawGlyph(ui.glyphCompose, draft);
     ui.composeCount.textContent = draft ? 'This is your signal' : taps.length + ' / ' + SIG_TAPS;
     ui.composeHint.textContent = draft
-      ? 'Play it first. Your score becomes the mark your friends have to beat.'
+      ? 'Send it as it is, or play it first to set a score for them to beat.'
       : 'Tap the ring six times, in any rhythm. That rhythm is your signal.';
     ui.playSignal.hidden = !draft;
+    ui.sendSignal.hidden = !draft;
+    ui.composeNote.textContent = '';
     ui.redo.hidden = !draft && taps.length === 0;
   }
 
@@ -837,6 +840,20 @@
       setTimeout(() => { if (mode === 'compose' && draft === made) playMotif(made); }, 600);
     }
     renderCompose();
+  }
+
+  // "I made this for you": the rhythm goes out with no score attached
+  function shareDraft() {
+    if (!draft) return;
+    const url = location.origin + location.pathname + '?s=' + draft.code;
+    const text = 'I made a signal for you. Can you answer it?';
+    const note = (msg) => { ui.composeNote.textContent = msg; };
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
+      else note(text + ' ' + url);
+    };
+    if (!navigator.share) { copy(); return; }
+    navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
   }
 
   function playDraft() {
@@ -967,7 +984,7 @@
     ctx.globalAlpha = clamp((t - 0.25) * 2.5, 0, 1);
     ctx.fillStyle = 'rgb(230,196,106)';
     ctx.font = `700 ${Math.round(12.5 * U)}px ${FONT}`;
-    ctx.fillText(('SEAT ' + ROMAN[storyN - 1] + '  ·  ' + w.when).toUpperCase(), x, y);
+    ctx.fillText(((storyN > 7 ? 'BEYOND THE SEVENTH SEAT  ·  ' : '') + 'SEAT ' + ROMAN[storyN - 1] + '  ·  ' + w.when).toUpperCase(), x, y);
     y += 34 * U;
     ctx.fillStyle = '#fff';
     ctx.font = `700 ${Math.round(30 * U)}px ${FONT}`;
@@ -980,10 +997,12 @@
     ctx.fillStyle = '#fff';
     ctx.font = `600 ${Math.round(11.5 * U)}px ${FONT}`;
     ctx.textAlign = 'center';
-    ctx.fillText(TOUCH ? 'TAP TO GO ON' : 'CLICK OR PRESS SPACE', field.cx, H - 26 * U);
+    ctx.fillText(storyN === 1 && !storyHeld ? (TOUCH ? 'TOUCH TO ANSWER IT' : 'CLICK OR PRESS SPACE TO ANSWER IT') : TOUCH ? 'TAP TO GO ON' : 'CLICK OR PRESS SPACE', field.cx, H - 26 * U);
     ctx.globalAlpha = 1;
   }
 
+  let practiceQ = [], practising = false, jumped = false, seatSpawned = 0, endKind = 'seat';
+  let fails = {};
   let overLine = '';
   // A signal run is a transmission: thirteen signals, identical for everyone who opens it,
   // with no time meter, prizes or interval acts, so two results can be compared fairly.
@@ -1110,6 +1129,7 @@
   function aimed() { return lanes() > 1 ? frontIn(aimLane) : front(); }
   function fallSpeed() { return Math.min(0.62, 0.25 * (1 + 0.085 * (speedLevel() - 1))) * H; }
   function spawnGap() {
+    if (txMode && practising) return 2.4;
     if (guided && level === 1 && spawned <= 4) return 2.3; // one at a time while the gamble is being learned
     const base = Math.max(0.44, 1.18 - 0.075 * speedLevel());
     // a shared signal falls in the rhythm it was tapped in
@@ -1144,6 +1164,8 @@
     level = n;
     cleared = 0;
     seatStats.hit = seatStats.wrong = seatStats.missed = 0;
+    fails = {};
+    seatSpawned = 0;
     bonusDone = false;
     bonusAt = Math.floor((10 + 3 * Math.min(n, 7)) * (0.35 + rng() * 0.3));
     goal = 10 + 3 * Math.min(level, 7);
@@ -1159,6 +1181,12 @@
       txGap = 4 + ((rng() * 7) | 0); // every transmission has at least one silence in it
       ui.grove.textContent = 'Transmission';
       showBanner(txName() + '<small>' + TX_N + ' signals · the same for everyone who opens it</small>', 2.4);
+      // a friend's signal is heard once, in the rhythm they tapped, before it begins
+      if (!signal.daily) { playMotif(signal); spawnTimer = Math.min(4.2, signal.iv.reduce((a, b) => a + b, 0) + 0.8); }
+      // someone who has never played learns each move first; these are not part of the thirteen
+      practiceQ = played ? [] : [0, 1, 2, 'gap'];
+      practising = practiceQ.length > 0;
+      if (practising) showBanner('Practice first<small>Four moves to learn. These do not count.</small>', 2.8);
     } else {
       seatStartScore = score;
       loadStill(n + 1);
@@ -1198,6 +1226,7 @@
     resetRun();
     const from = !txMode && Number.isInteger(at) && at > 1 ? Math.min(at, WORLDS.length) : 1;
     if (from > 1) guided = false;
+    jumped = from > 1;
     playSong(txMode ? 'prelude' : trackFor(from));
     setMode('play');
     setupLevel(txMode ? 3 : from);
@@ -1224,10 +1253,10 @@
     ui.compose.hidden = m !== 'compose';
     if (m === 'pause') ui.storyBtn.hidden = txMode;
     ui.endless.hidden = true;
+    ui.endShare.hidden = true;
     if (m === 'title') {
       const fresh = !played, run = liveStreak();
       ui.daily.hidden = fresh;
-      ui.signalBtn.hidden = fresh;
       ui.daily.textContent = "Today's transmission" + (run ? ' · streak ' + days(run) : '');
     }
     ui.pause.hidden = m !== 'pause';
@@ -1243,7 +1272,19 @@
   function spawnTarget(avoid) {
     spawned++;
     const rl = ruleLevel();
-    const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: rng() * TAU, wob: 0 };
+    const practice = txMode && practiceQ.length > 0;
+    const t = { shade: false, bonus: false, seq: [], done: 0, mirror: false, cloak: false, y: field.top - 40 * U, ph: (practice ? Math.random() : rng()) * TAU, wob: 0 };
+    if (txMode && practiceQ.length) {
+      const k = practiceQ.shift();
+      spawned--; // practice is outside the numbered sequence, so both players still get the same thirteen
+      t.practice = true;
+      if (k === 'gap') { t.shade = true; t.tip = 'Practice: silence. Let it pass, do not touch'; }
+      else { t.seq.push(k); t.tip = 'Practice: ' + HINTS[k]; }
+      lastVoid = false;
+      targets.push(t);
+      return;
+    }
+    if (txMode && practising) { practising = false; showBanner(txName() + '<small>Now it counts: ' + TX_N + ' signals</small>', 2.2); }
     if (txMode) {
       if (spawned === txGap || (!lastVoid && spawned > 2 && rng() < 0.12)) t.shade = true;
       else t.seq.push((rng() * 3) | 0);
@@ -1274,8 +1315,10 @@
       targets.push(t);
       return;
     }
+    seatSpawned++;
     const signs = rl >= 4 ? 4 : rl >= 2 ? 3 : spawned > 4 ? 2 : 1;
-    if (rl >= 2 && !lastVoid && rng() < (rl === 2 ? 0.08 : Math.min(0.24, 0.12 + 0.02 * rl))) {
+    // The Notebook opens the way the story says: six signals, then a silence
+    if (rl >= 2 && !lastVoid && !(level === 3 && seatSpawned <= 6) && rng() < (rl === 2 ? 0.08 : Math.min(0.24, 0.12 + 0.02 * rl))) {
       t.shade = true;
     } else {
       let len = 1;
@@ -1286,10 +1329,14 @@
       if (first && level === 2) { t.seq = [2]; len = 1; }
       if (first && level === 4) { t.seq = [3]; len = 1; }
       if (first && level === 5) { t.seq = [0, 1]; len = 2; }
+      if (first && level === 6) { t.seq = [0]; len = 1; }
       if (len === 1 && t.seq[0] < 2 && rl >= 6 && (first && level === 6 || rng() < Math.min(0.45, 0.28 + 0.03 * (rl - 6)))) t.mirror = true;
       if (rl >= 7 && !t.mirror && (first && level === 7 || rng() < Math.min(0.5, 0.3 + 0.04 * (rl - 7)))) t.cloak = true;
     }
-    if ((level === 3 && cleared + targets.length === 1) || (level === 1 && spawned === 9)) { t.shade = true; t.seq = []; t.mirror = t.cloak = false; }
+    if ((level === 3 && seatSpawned === 7) || (level === 1 && spawned === 9)) { t.shade = true; t.seq = []; t.mirror = t.cloak = false; }
+    if (level === 3 && seatSpawned === 7) t.tip = 'Six. Then silence. Let it pass';
+    // the first mirrored signal of a run shows its own reflection, so the trick is seen before it is asked
+    if (t.mirror && learned.mirror === 0 && !targets.some((q) => q.teach)) t.teach = true;
     lastVoid = t.shade;
     targets.push(t);
   }
@@ -1327,6 +1374,7 @@
       if (g === 'hold') return;
       t.wob = 0.35;
       t.touched = true;
+      if (t.practice) { texts.push({ x: targetX(t), y: t.y - 44 * U, text: 'Leave it alone', life: 1.2, rgb: '255,200,140', size: 17 }); return; }
       if (txMode) tx.flinch = true;
       penalty(t.soft ? 0.03 : 0.12, 'You touched the silence', targetX(t), t.y, HAPTIC.lostTime);
       return;
@@ -1334,11 +1382,20 @@
     if (needOf(t) === g) answer(t, t.seq[t.done]);
     else if (g !== 'hold') {
       t.wob = 0.35;
+      if (t.practice) { texts.push({ x: targetX(t), y: t.y - 44 * U, text: 'Not that move', life: 1.2, rgb: '255,200,140', size: 17 }); return; }
       penalty(0.07, t.mirror ? 'Mirrored: opposite' : 'Wrong signal', targetX(t), t.y);
     }
   }
 
   function answer(t, el) {
+    if (t.practice) {
+      sfx.hit(el, 0);
+      buzz(HAPTIC[needOf(t)]);
+      burst(targetX(t), t.y, ELEMENTS[el].rgb, 16, 220);
+      texts.push({ x: targetX(t), y: t.y - 44 * U, text: 'Good', life: 1, rgb: '255,243,196', size: 18 });
+      targets.splice(targets.indexOf(t), 1);
+      return;
+    }
     const x = targetX(t), y = t.y;
     const near = clamp((y - field.top) / (field.heartY - field.top), 0, 1);
     combo++;
@@ -1479,7 +1536,7 @@
       setMode('play');
       spawnTimer = Math.max(spawnTimer, 0.7);
       last = performance.now();
-      if (prize === 'skip') { cleared = goal; if (level === 7) startEnding(); else startInterlude(); }
+      if (prize === 'skip') { cleared = goal; finishSeat(); }
     }
   }
 
@@ -1586,8 +1643,13 @@
   function clearedOne() {
     cleared++;
     totalCleared++;
-    if (cleared < goal) return;
-    if (txMode) gameOver(); else if (level === 7) startEnding(); else startInterlude();
+    if (cleared >= goal) finishSeat();
+  }
+  function finishSeat() {
+    if (txMode) gameOver();
+    else if (level === 7) startEnding('seat');
+    else if (level === LAST) startEnding('shore');
+    else startInterlude();
   }
 
   function useShield(x, y) {
@@ -1602,6 +1664,7 @@
 
   function penalty(amount, label, x, y, feel) {
     if (useShield(x, y)) return;
+    fails[label] = (fails[label] || 0) + 1;
     light -= amount;
     flash = 1;
     tallyUp('wrong');
@@ -1634,7 +1697,10 @@
 
   // Seat VII stops the action: the signal goes back, six seats answer, and the seventh
   // answers with the last phrase the player actually played.
-  function startEnding() {
+  function startEnding(kind) {
+    endKind = kind || 'seat';
+    ui.endless.textContent = endKind === 'shore' ? 'Keep playing' : 'Go beyond';
+    ui.endShare.textContent = 'Share this';
     score += 1400;
     light = 1;
     for (const t of targets) burst(targetX(t), t.y, t.shade ? '150,110,210' : t.bonus ? '230,196,106' : ELEMENTS[t.seq[t.done]].rgb, 16, 220);
@@ -1642,7 +1708,20 @@
     endT = 0;
     setMode('ending');
     buzz(HAPTIC.seat);
-    const k = keyNote();
+    let k = keyNote();
+    if (endKind === 'shore') {
+      // the one on the shore answers: the three-note reply, then the player's own phrase
+      loadStill(LAST);
+      [2, 1.4983, 2.6697].forEach((m, i) => tone(k * m, 0.9, 'triangle', 0.08, 1.2 + i * 0.3));
+      (phrase.length ? phrase : [k, k * 1.3348, k * 1.4983]).forEach((f, i) => { tone(f, 0.5, 'triangle', 0.09, 3.4 + i * 0.27); tone(f * 2, 0.5, 'sine', 0.04, 3.4 + i * 0.27); });
+      return;
+    }
+    // the seventh seat always arrives to The Curtains, unless it has already been heard
+    if (song && !songFailed && songName && songName !== 'curtains' && !songPlayed.has('curtains')) {
+      songPlayed.add(songName);
+      songWant = 'curtains';
+      k = TRACKS.curtains.tonic;
+    }
     [1, 1.4983, 1.3348, 2].forEach((m, i) => tone((k / 2) * m, 0.55, 'sine', 0.08, 1.0 + i * 0.3));
     [1, 1.1225, 1.3348, 1.4983, 2, 2.245].forEach((m, i) => tone(k * m, 0.5, 'triangle', 0.07, 2.8 + i * 0.42));
     (phrase.length ? phrase : [k, k * 1.3348, k * 1.4983]).forEach((f, i) => { tone(f, 0.5, 'triangle', 0.09, 5.8 + i * 0.27); tone(f * 2, 0.5, 'sine', 0.04, 5.8 + i * 0.27); });
@@ -1650,6 +1729,35 @@
 
   function drawEnding() {
     const cx = field.cx, gold = '230,196,106', t = endT;
+    if (endKind === 'shore') {
+      const im = storyImg[LAST];
+      ctx.fillStyle = '#020204';
+      ctx.fillRect(-40, -40, W + 80, H + 80);
+      if (im && im.complete && im.naturalWidth) {
+        const k = Math.max(W / im.naturalWidth, H / im.naturalHeight) * (1.02 + t * 0.02);
+        ctx.globalAlpha = clamp(t, 0, 1);
+        ctx.drawImage(im, (W - im.naturalWidth * k) / 2, (H - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k);
+        ctx.globalAlpha = 1;
+      }
+      const g = ctx.createLinearGradient(0, H * 0.4, 0, H);
+      g.addColorStop(0, 'rgba(2,2,4,0)');
+      g.addColorStop(1, 'rgba(2,2,4,0.92)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgb(${gold})`;
+      ctx.font = `700 ${Math.round(Math.min(23 * U, W / 21))}px ${FONT}`;
+      ctx.globalAlpha = clamp((t - 0.6) * 2, 0, 1);
+      ctx.fillText(t < 3.2 ? 'ALL TEN SEATS ANSWERED' : 'THE ONE ON THE SHORE ANSWERS', cx, H * 0.7);
+      if (t > 3.4) {
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = `600 ${Math.round(14 * U)}px ${FONT}`;
+        ctx.globalAlpha = clamp((t - 3.4) * 2, 0, 1);
+        ctx.fillText('IN THE NOTES YOU PLAYED.', cx, H * 0.7 + 30 * U);
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
     ctx.fillStyle = `rgba(2,2,4,${0.82 * clamp(t * 1.5, 0, 1)})`;
     ctx.fillRect(-40, -40, W + 80, H + 80);
     const span = Math.min(W * 0.92, 640 * U), sw = span / 8.4, y0 = H * 0.4;
@@ -1697,7 +1805,9 @@
 
   function gameOver() {
     setMode('over');
-    const isBest = score > best;
+    // the campaign best is only set by full campaign runs: not transmissions, not runs begun part-way
+    const counts = !txMode && !jumped;
+    const isBest = counts && score > best;
     if (isBest) {
       best = score;
       try { localStorage.setItem('atumaa.best', String(best)); } catch (e) { /* storage blocked */ }
@@ -1718,13 +1828,24 @@
     }
     ui.overTitle.textContent = overLine;
     if (!txMode) ui.finalDetail.textContent = 'Reached ' + seatLabel() + ' · ' + world().name;
-    const rows = [['Answered', runStats.hit], ['Missed', runStats.missed], ['Wrong moves', runStats.wrong], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo], ['Interval acts', memories]];
+    const rows = [['Answered', runStats.hit], ['Clean', accuracy(runStats) + '%'], ['Best streak', bestCombo]];
     ui.finalStats.innerHTML = rows.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('');
     buildCard();
     played = true;
     try { localStorage.setItem('atumaa.played', '1'); } catch (e) { /* storage blocked */ }
     ui.daily2.hidden = !!(signal && signal.daily === today());
-    ui.bestOver.textContent = overBest ? 'New best!' : 'Best ' + best.toLocaleString();
+    ui.bestOver.textContent = !counts ? '' : overBest ? 'New best!' : 'Best ' + best.toLocaleString();
+    // one thing to do differently, drawn from what went wrong most in this seat
+    const TIPS = {
+      'Nothing in that lane': 'Start your move in the lane the signal is falling in.',
+      'You touched the silence': 'A Gap only hurts if you touch it. Keep your thumb still and it passes.',
+      'Mirrored: opposite': 'A signal in a split frame wants the opposite swipe.',
+      'Wrong signal': 'Read the sign first: arrow up, arrow down, star for a double-tap, ring for a hold.',
+      Missed: 'Answer a little sooner. A signal that reaches the seat costs more than a wrong move.',
+    };
+    const worst = Object.keys(fails).sort((a, b) => fails[b] - fails[a])[0];
+    ui.tip.hidden = txMode || !worst;
+    ui.tip.textContent = worst ? TIPS[worst] || '' : '';
     // a signal run ends with its mark, how it went against the sender, and a way to send it on
     const sig = signal;
     ui.glyphOver.hidden = ui.signalResult.hidden = ui.free.hidden = !sig;
@@ -1742,8 +1863,8 @@
       const cmp = !them ? ''
         : tx.ok > them.r ? 'They answered ' + them.r + '. You answered ' + tx.ok + '. You win.'
         : tx.ok < them.r ? 'They answered ' + them.r + '. You answered ' + tx.ok + '. Rematch?'
-        : score > them.p ? 'You both answered ' + tx.ok + '. You waited longer and won by ' + (score - them.p) + '.'
-        : score < them.p ? 'You both answered ' + tx.ok + '. They waited longer and won by ' + (them.p - score) + '.'
+        : score > them.p ? 'You both answered ' + tx.ok + '. You won by ' + (score - them.p) + ' points.'
+        : score < them.p ? 'You both answered ' + tx.ok + '. They won by ' + (them.p - score) + ' points.'
         : 'A dead heat: ' + tx.ok + ' answered and ' + score + ' points each.';
       ui.signalResult.textContent = cmp || (sig.daily ? 'The same ' + TX_N + ' signals for everyone. Your best is ' + dayBest.toLocaleString() + '.' + (sig.daily === today() ? ' A new one arrives at ' + resetTime() + '.' : '')
         : sig.mine ? 'Your signal is ready. Send it and see who can answer it.'
@@ -1754,7 +1875,9 @@
     ui.retry.hidden = !canRetry;
     if (canRetry) ui.retry.textContent = 'Replay ' + seatLabel() + ' · ' + retries + ' left';
     ui.again.textContent = sig ? 'Rematch' : canRetry ? 'Start over' : 'Try again';
-    ui.again.className = canRetry ? 'secondary' : 'primary';
+    // one main action per outcome: replay the seat, start again, or send the challenge
+    ui.again.className = !txMode && !canRetry ? 'primary' : 'secondary';
+    ui.share.className = txMode ? 'primary' : 'secondary';
     // finishing today's transmission keeps the daily streak going and opens the board
     const isToday = !!(sig && sig.daily === today());
     ui.streak.hidden = !isToday;
@@ -1767,7 +1890,8 @@
       ui.boardCount.textContent = '';
       loadBoard();
     }
-    sfx.over();
+    // a friend's signal ends as it began, with the rhythm they tapped
+    if (txMode && !signal.daily) playMotif(signal); else sfx.over();
     buzz(HAPTIC.over);
   }
 
@@ -1795,7 +1919,7 @@
 
     if (playing) {
       spawnTimer -= dt;
-      if (spawnTimer <= 0 && cleared + targets.length < goal) {
+      if (spawnTimer <= 0 && cleared + targets.length < goal && !(practising && !practiceQ.length && targets.length)) {
         spawnTarget();
         // in the last seats two signals sometimes arrive together, in different lanes
         if (level >= 10 && cleared + targets.length < goal && rng() < 0.22) spawnTarget(targets[targets.length - 1].lane);
@@ -1810,6 +1934,12 @@
       t.wob = Math.max(0, t.wob - dt);
       if (playing && t.y >= field.heartY - 30 * U) {
         targets.splice(i, 1);
+        if (t.practice) {
+          const ok = t.shade && !t.touched;
+          if (!ok) practiceQ.unshift(t.shade ? 'gap' : t.seq[0]); // try that one again
+          texts.push({ x: field.cx, y: field.heartY - 60 * U, text: ok ? 'Good' : 'Once more', life: 1, rgb: '255,243,196', size: 17 });
+          continue;
+        }
         if (t.bonus) {
           texts.push({ x: field.cx, y: field.heartY - 60 * U, text: 'It faded', life: 1, rgb: '200,190,160', size: 16 });
           continue;
@@ -1830,6 +1960,7 @@
         } else if (useShield(field.cx, field.heartY)) {
           tallyUp('hit');
         } else {
+          fails.Missed = (fails.Missed || 0) + 1;
           light -= Math.min(0.2, 0.1 + 0.03 * speedLevel()); // gentler while the first seats are being learned
           flash = 1;
           combo = 0;
@@ -2153,6 +2284,14 @@
         ctx.moveTo(x - r - 16 * U, y);
         ctx.lineTo(x + r + 16 * U, y);
         ctx.stroke();
+        if (t.teach) {
+          // its reflection hangs below, pointing the way it really wants
+          const back = el === 0 ? 1 : 0, ry2 = y + r * 2 + 20 * U;
+          ctx.globalAlpha = fadeIn * (0.45 + 0.2 * Math.sin(time * 5));
+          orbBody(x, ry2, r * 0.78, '255,120,235', 0.8);
+          drawIcon(back, x, ry2, r * 0.45, 0.95);
+          ctx.globalAlpha = fadeIn;
+        }
       } else {
         drawCue(el, x, y, r, isFront, mine ? holdT : 0);
       }
@@ -2676,7 +2815,7 @@
     else if (mode === 'bonus') updateBonus(dt);
     else if (mode === 'act') updateAct(dt);
     else if (mode === 'story') { time += dt; storyT += dt; if (!storyHeld && storyT > (storyN > 7 ? 4.5 : 7)) endStory(); } // shorter once the ending has been seen
-    else if (mode === 'ending') { time += dt; endT += dt; scrollY += H * 0.04 * dt; if (endT > 8.2 && ui.endless.hidden) ui.endless.hidden = false; }
+    else if (mode === 'ending') { time += dt; endT += dt; scrollY += H * 0.04 * dt; if (endT > (endKind === 'shore' ? 6.4 : 8.2) && ui.endless.hidden) { ui.endless.hidden = false; ui.endShare.hidden = false; } }
     else if (mode === 'intro') {
       time += dt;
       introT += dt;
@@ -2707,15 +2846,23 @@
     if (mode === 'play') setMode('pause');
     else if (mode === 'pause') { last = performance.now(); setMode('play'); }
   }
+  // the top-bar button and M switch everything; the pause screen has one switch each
   function toggleSound() {
     muted = !muted;
+    setMusic(!muted);
+  }
+  function toggleEffects() { muted = !muted; syncToggles(); }
+  function setMusic(on) {
+    musicOff = !on;
+    try { localStorage.setItem('atumaa.music', on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
     syncToggles();
   }
   function endHold() { holding = false; holdT = 0; }
   function syncToggles() {
-    ui.sound.classList.toggle('off', muted);
+    ui.sound.classList.toggle('off', muted && musicOff);
     ui.haptic.classList.toggle('off', !hapticsOn);
-    ui.sound2.textContent = 'Sound: ' + (muted ? 'off' : 'on');
+    ui.sound2.textContent = 'Effects: ' + (muted ? 'off' : 'on');
+    ui.music2.textContent = 'Music: ' + (musicOff ? 'off' : 'on');
     ui.haptic2.textContent = 'Vibration: ' + (hapticsOn ? 'on' : 'off');
   }
   function toggleHaptics() {
@@ -2819,7 +2966,6 @@
 
   $('btn-start').addEventListener('click', () => startGame(startSeat));
   ui.retry.addEventListener('click', retrySeat);
-  $('btn-aim').addEventListener('click', () => { signal = null; startGame(8); });
   $('btn-how').addEventListener('click', startIntro);
   $('btn-again').addEventListener('click', () => startGame());
   $('btn-resume').addEventListener('click', togglePause);
@@ -2827,14 +2973,24 @@
   ui.skip.addEventListener('click', startGame);
   ui.sound.addEventListener('click', toggleSound);
   ui.haptic.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
-  ui.sound2.addEventListener('click', toggleSound);
+  ui.sound2.addEventListener('click', toggleEffects);
+  ui.music2.addEventListener('click', () => setMusic(musicOff));
   ui.haptic2.addEventListener('click', () => { initHaptics(); toggleHaptics(); });
   ui.daily.addEventListener('click', playDaily);
   ui.daily2.addEventListener('click', playDaily);
   ui.storyBtn.addEventListener('click', () => { if (mode === 'pause' && !txMode) { loadStill(seatOf(level)); beginStory(seatOf(level), true); } });
   ui.post.addEventListener('click', postBoard);
   try { ui.boardName.value = cleanName(localStorage.getItem('atumaa.name')); } catch (e) { /* storage blocked */ }
-  ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(8); });
+  ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(level + 1); });
+  ui.endShare.addEventListener('click', () => {
+    const url = location.origin + location.pathname;
+    const text = endKind === 'shore' ? 'I answered all ten seats in ATUMAA. The one on the shore answered back.' : 'I took the seventh seat in ATUMAA. It was looking for me. Can you take yours?';
+    const copy = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => { ui.endShare.textContent = 'Copied'; }, () => {});
+    };
+    if (!navigator.share) { copy(); return; }
+    navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
+  });
   syncToggles();
   for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily', 'btn-daily2']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
 
@@ -2845,6 +3001,7 @@
   ui.tapPad.addEventListener('pointerdown', (e) => { e.preventDefault(); composeTap(); });
   ui.tapPad.addEventListener('click', (e) => e.preventDefault());
   ui.playSignal.addEventListener('click', playDraft);
+  ui.sendSignal.addEventListener('click', shareDraft);
   ui.redo.addEventListener('click', () => { taps = []; draft = null; renderCompose(); });
   ui.share.addEventListener('click', shareSignal);
   ui.free.addEventListener('click', () => { signal = null; startGame(); });
@@ -2865,7 +3022,8 @@
     ui.glyphTitle.hidden = false;
     drawGlyph(ui.glyphTitle, signal);
     ui.premise.textContent = signal.theirs ? 'A friend answered ' + signal.theirs.r + ' of ' + TX_N + '. Same signals, same timing. Your turn.'
-      : (signal.daily ? dayLabel(signal.daily) : 'A transmission') + ' is waiting: ' + TX_N + ' signals, the same for everyone. Answer it.';
+      : signal.daily ? dayLabel(signal.daily) + ' is waiting: ' + TX_N + ' signals, the same for everyone. Answer it.'
+      : 'Someone tapped this signal for you. ' + TX_N + ' signals in their rhythm. Answer it.';
     ui.start.textContent = 'Answer it';
   }
   resize();
