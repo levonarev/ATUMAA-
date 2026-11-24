@@ -449,12 +449,18 @@
   /* ---------- Soundtrack: Project LA ---------- */
   // One track per stretch of the story. `tonic` is the track's key note, so the sounds the
   // player makes (answers, the call and reply, fanfares) are tuned to sit inside the music.
+  // `trim` evens out how loud the recordings are, so no track jumps out over the others.
   const TRACKS = {
-    prelude: { src: 'music/prelude.mp3', tonic: 440.0 },           // A
-    marionettes: { src: 'music/marionettes.mp3', tonic: 493.88 },  // B
-    afterwords: { src: 'music/afterwords.mp3', tonic: 392.0 },     // G
+    prelude: { src: 'music/prelude.mp3', tonic: 440.0, trim: 0.82 },            // A
+    marionettes: { src: 'music/marionettes.mp3', tonic: 493.88, trim: 0.98 },   // B
+    curtains: { src: 'music/curtains.mp3', tonic: 440.0, trim: 0.62 },          // A
+    afterwords: { src: 'music/afterwords.mp3', tonic: 392.0, trim: 1.3 },       // G
   };
-  const trackFor = (seat) => (seat <= 3 ? 'prelude' : seat <= 7 ? 'marionettes' : 'afterwords');
+  const ORDER = ['prelude', 'marionettes', 'curtains', 'afterwords'];
+  const MUSIC_LEVEL = 0.3; // kept well under the game's own sounds
+  // the track that suits each stretch of the story
+  const trackFor = (seat) => (seat <= 3 ? 'prelude' : seat <= 6 ? 'marionettes' : seat === 7 ? 'curtains' : 'afterwords');
+  let songPlayed = new Set();
   // tonic, second, fourth and fifth: notes that fit a major or a minor key alike
   const DEGREES = [1, 1.1225, 1.3348, 1.4983];
   let song = null, songGain = null, songName = '', songWant = '', songVol = 0, songFailed = false;
@@ -467,9 +473,10 @@
   function unlockSong() {
     if (song) return;
     song = new Audio();
-    song.loop = true;
+    song.loop = false; // tracks are never repeated back to back: when one ends, the next begins
     song.preload = 'auto';
     song.addEventListener('error', () => { songFailed = true; });
+    song.addEventListener('ended', nextSong);
     if (ac && location.protocol !== 'file:') {
       try {
         songGain = ac.createGain();
@@ -483,25 +490,45 @@
     const p = song.play();
     if (p && p.catch) p.catch(() => { /* will be retried from the next tap */ });
   }
-  function playSong(name) { songWant = name; }
+  // The very first run chooses the opening track to suit the seat it starts in. After that
+  // the music simply carries on: seat changes and new runs never cut a track short.
+  function playSong(name) {
+    if (!song || !songName || (!songPlayed.size && song.currentTime < 3)) songWant = name;
+  }
+  // When a track ends, play one that has not been heard yet: the one that suits the current
+  // seat if possible, otherwise the next in order. Only when all four have played does the
+  // list start again, and never with the track that just finished.
+  function nextSong() {
+    songPlayed.add(songName);
+    if (songPlayed.size >= ORDER.length) songPlayed = new Set([songName]);
+    const suits = txMode ? 'prelude' : trackFor(seatOf(level));
+    const from = ORDER.indexOf(songName);
+    let pick = !songPlayed.has(suits) ? suits : '';
+    for (let i = 1; i <= ORDER.length && !pick; i++) { const n = ORDER[(from + i) % ORDER.length]; if (!songPlayed.has(n)) pick = n; }
+    songName = songWant = pick || ORDER[(from + 1) % ORDER.length];
+    song.src = TRACKS[songName].src;
+    const p = song.play();
+    if (p && p.catch) p.catch(() => {});
+  }
 
   function tickSong(dt) {
     if (!song || songFailed) return;
     const live = mode === 'play' || mode === 'interlude' || mode === 'story' || mode === 'bonus' || mode === 'act' || mode === 'ending' || mode === 'over';
     const lead = mode === 'play' ? front() : null;
     // full in play; hushed while a silence leads, during the timing acts and on the end screen
-    let want = muted || !live ? 0 : mode === 'act' ? 0.1 : mode === 'bonus' ? 0.25 : mode === 'over' ? 0.3 : lead && lead.shade ? 0.16 : 0.62;
+    let want = muted || !live ? 0 : mode === 'act' ? 0.2 : mode === 'bonus' ? 0.45 : mode === 'over' ? 0.6 : lead && lead.shade ? 0.25 : 1;
     const swap = songWant && songWant !== songName;
     if (swap) want = 0;
-    songVol += clamp(want - songVol, -dt * 1.4, dt * 0.7);
+    songVol += clamp(want - songVol, -dt * 2.2, dt * 1.1);
     if (swap && songVol <= 0.01) {
       songName = songWant;
       song.src = TRACKS[songName].src;
       const p = song.play();
       if (p && p.catch) p.catch(() => {});
     }
-    if (songGain) songGain.gain.value = songVol;
-    else { song.volume = clamp(songVol, 0, 1); song.muted = songVol < 0.02; }
+    const out = songVol * MUSIC_LEVEL * TRACKS[songName].trim;
+    if (songGain) songGain.gain.value = out;
+    else { song.volume = clamp(out, 0, 1); song.muted = songVol < 0.02; }
     const idle = songVol <= 0.01 && want === 0 && !swap;
     if (idle && !song.paused) song.pause();
     else if (!idle && song.paused) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
@@ -1127,11 +1154,9 @@
       bonusDone = true;
       txGap = 4 + ((rng() * 7) | 0); // every transmission has at least one silence in it
       ui.grove.textContent = 'Transmission';
-      playSong('prelude');
       showBanner(txName() + '<small>' + TX_N + ' signals · the same for everyone who opens it</small>', 2.4);
     } else {
       seatStartScore = score;
-      playSong(trackFor(seatOf(n)));
       loadStill(n + 1);
       // the first time a seat is reached, its story card comes before the signals
       if (n <= WORLDS.length && !storySeen.has(n)) { loadStill(n); beginStory(n); }
@@ -1169,6 +1194,7 @@
     resetRun();
     const from = !txMode && Number.isInteger(at) && at > 1 ? Math.min(at, WORLDS.length) : 1;
     if (from > 1) guided = false;
+    playSong(txMode ? 'prelude' : trackFor(from));
     setMode('play');
     setupLevel(txMode ? 3 : from);
   }
