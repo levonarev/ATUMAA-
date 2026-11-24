@@ -316,3 +316,43 @@ button.secondary:hover { filter: brightness(1.3); }
 #unlocked-line { margin: 0 0 12px; font-size: 14px; text-wrap: balance; }
 
 .credit.note { margin-top: 4px; font-size: 10px; letter-spacing: 0.06em; text-transform: none; opacity: 0.6; }
+
+/* ---------- Short, wide frames (desktop windows and portal iframes) ---------- */
+@media (max-height: 800px) and (orientation: landscape) {
+  .screen { padding: 8px; }
+  .panel { padding: 14px 24px 12px; }
+  .panel.small { width: min(100%, 660px); }
+  h1 { font-size: 34px; }
+  h2 { margin-bottom: 8px; font-size: 18px; }
+  .tagline { margin: 2px 0 8px; font-size: 12px; }
+  .seats { margin: 0 0 8px; }
+  .seats i { width: 10px; height: 10px; }
+  .premise { margin-bottom: 10px; font-size: 12.5px; line-height: 1.5; max-width: 48ch; }
+  button.primary { padding: 9px 26px; font-size: 16px; }
+  button.secondary { padding: 7px 18px; font-size: 14px; margin-top: 8px; }
+  .controls { margin-top: 8px; font-size: 12.5px; }
+  .linkish { margin-top: 2px; padding: 5px 12px; font-size: 12.5px; }
+  .best { margin-top: 4px; font-size: 13px; }
+  .credit { margin-top: 4px; }
+  #screen-title { background: radial-gradient(ellipse at center, rgba(5, 7, 13, 0.2), rgba(2, 3, 8, 0.8)); }
+  #screen-title .panel { margin: auto; width: min(100%, 560px); }
+  /* end, pause and composer screens: buttons flow in rows instead of one long column */
+  #screen-over button, #screen-pause button, #screen-compose button:not(#tap-pad) { display: inline-block !important; margin: 6px 4px 0 !important; }
+  #screen-over [hidden], #screen-pause [hidden], #screen-compose [hidden] { display: none !important; }
+  .final { font-size: 16px; }
+  .final strong { font-size: 26px; }
+  #final-stats { margin: 8px 0 4px; }
+  #final-stats div { padding: 5px 4px; }
+  #final-stats dd { font-size: 16px; }
+  .tip { margin-bottom: 6px; padding: 7px 10px; font-size: 13px; }
+  .glyph { width: 60px; height: 60px; margin-bottom: 6px; }
+  #signal-result { margin-bottom: 6px; font-size: 13.5px; }
+  #unlocked-line, #streak-line { margin-bottom: 6px; font-size: 13px; }
+  #tap-pad { width: 132px; height: 132px; }
+  #tap-pad .glyph { width: 104px; height: 104px; margin: 0 auto; }
+  #screen-collection .panel { width: min(100%, 760px); }
+  #stills { grid-template-columns: repeat(10, 1fr); gap: 5px; }
+  .still span { font-size: 8px; padding: 8px 2px 3px; }
+  #tracklist { grid-template-columns: repeat(4, 1fr); }
+  #banner { top: 30%; }
+}
