@@ -13,18 +13,30 @@
 
   // The seven seats. Story text lives here so it can be swapped for the film's own names.
   // Each seat adds one complication on top of everything before it.
+  // The ten seats follow the film's eight episodes. `when` and `story` make the story card shown
+  // the first time a seat is reached; `art` picks the landmark painted behind the lane.
   const WORLDS = [
-    { name: 'The Listening Room', adds: 'Pulse and Echo: swipe up, swipe down', bg: '#040a0c', glow: '18,70,72', speck: '255,190,120', side: [10, 34, 38], shape: 'girders', accent: '90,235,190' },
-    { name: 'Launch', adds: 'Flare: double-tap', bg: '#120b08', glow: '120,70,48', speck: '255,220,190', side: [50, 28, 20], shape: 'pillars', accent: '255,190,140' },
-    { name: 'The Crossing', adds: 'Gaps come thick now: never touch them', bg: '#030408', glow: '30,36,60', speck: '220,225,255', side: [26, 28, 36], shape: 'crystals', accent: '200,210,255' },
-    { name: '1998 KY26', adds: 'Lock: press and hold', bg: '#070605', glow: '92,66,26', speck: '255,215,150', side: [36, 32, 28], shape: 'shards', accent: '255,196,110' },
-    { name: 'The Corridor', adds: 'Bound signals: answer each in turn', bg: '#04070a', glow: '30,70,90', speck: '255,200,140', side: [86, 62, 40], shape: 'screens', accent: '255,190,120' },
-    { name: 'Twin Suns', adds: 'Mirrored signals: swipe the opposite way', bg: '#0a0612', glow: '110,60,150', speck: '255,180,230', side: [44, 22, 60], shape: 'dunes', accent: '255,140,170' },
-    { name: 'The Seventh Seat', adds: 'Cloaked signals: revealed at the last moment', bg: '#050505', glow: '70,60,40', speck: '255,220,150', side: [24, 24, 26], shape: 'pillars', accent: '255,214,130' },
+    { name: 'The Listening Room', when: 'November 2026', story: 'Eleven metres of rock is speeding up, and nobody can say why. In the listening room she closes her eyes. Inside the noise, a heartbeat.', art: 'scope',
+      adds: 'Pulse and Echo: swipe up, swipe down', bg: '#040a0c', glow: '18,70,72', speck: '255,190,120', side: [10, 34, 38], shape: 'girders', accent: '90,235,190' },
+    { name: 'First Contact', when: 'July 2031', story: 'The probe arrives after five years. The rock answers it with a single line of light, and a ring opens on its face.', art: 'crossing', beam: true,
+      adds: 'Flare: double-tap', bg: '#030408', glow: '30,36,60', speck: '220,225,255', side: [26, 28, 36], shape: 'crystals', accent: '200,210,255' },
+    { name: 'The Notebook', when: 'Three days later', story: 'She lays the traces beside an old notebook. The pattern is not noise. It is counting, and it stops at six.', art: 'notebook',
+      adds: 'Gaps come thick now: never touch them', bg: '#0b0906', glow: '96,70,38', speck: '255,214,160', side: [46, 32, 18], shape: 'screens', accent: '255,200,120' },
+    { name: 'Launch', when: '2032', story: 'Six go. None of them can say why it had to be these six, only that each is missing the same five minutes.', art: 'rocket',
+      adds: 'Lock: press and hold', bg: '#120b08', glow: '120,70,48', speck: '255,220,190', side: [50, 28, 20], shape: 'pillars', accent: '255,190,140' },
+    { name: 'Day 212', when: 'At 1998 KY26', story: 'They reach it at last. The ring turns once, and the rock opens.', art: 'ky26',
+      adds: 'Bound signals: answer each in turn', bg: '#070605', glow: '92,66,26', speck: '255,215,150', side: [36, 32, 28], shape: 'shards', accent: '255,196,110' },
+    { name: 'The Corridor', when: 'Inside', story: 'A wall of screens with no end, each one a memory of Earth. One of them is showing the listening room.', art: 'corridor',
+      adds: 'Mirrored signals: swipe the opposite way', bg: '#04070a', glow: '30,70,90', speck: '255,200,140', side: [86, 62, 40], shape: 'screens', accent: '255,190,120' },
+    { name: 'The Seventh Seat', when: 'The chamber', story: 'Seven seats of black stone. Six were always theirs. On the seventh lies a figure made of sand.', art: 'seats',
+      adds: 'Cloaked signals: revealed at the last moment', bg: '#050505', glow: '70,60,40', speck: '255,220,150', side: [24, 24, 26], shape: 'pillars', accent: '255,214,130' },
     // beyond the seventh seat the signals arrive in lanes, and the move has to be made in the right one
-    { name: 'The Field', adds: "Aim: two lanes. Make your move in the signal's own lane", bg: '#03090b', glow: '20,90,100', speck: '120,255,240', side: [14, 40, 44], shape: 'shards', accent: '90,240,230' },
-    { name: 'The Shore', adds: 'Three lanes, and the old tricks return', bg: '#0b0907', glow: '110,80,50', speck: '255,220,180', side: [40, 30, 24], shape: 'dunes', accent: '255,200,140' },
-    { name: 'The Answer', adds: 'Everything at once, sometimes two together', bg: '#060606', glow: '80,70,40', speck: '255,230,170', side: [30, 28, 22], shape: 'pillars', accent: '255,220,130' },
+    { name: 'Twin Suns', when: 'Through the ring', story: 'Two of them step into the light and wake under two suns, above a violet sea.', art: 'suns',
+      adds: "Aim: two lanes. Make your move in the signal's own lane", bg: '#0a0612', glow: '110,60,150', speck: '255,180,230', side: [44, 22, 60], shape: 'dunes', accent: '255,140,170' },
+    { name: 'The Field', when: 'The far world', story: 'Rocks to the horizon, every one with its own ring. It has been calling to many worlds.', art: 'field',
+      adds: 'Three lanes, and the old tricks return', bg: '#03090b', glow: '20,90,100', speck: '120,255,240', side: [14, 40, 44], shape: 'shards', accent: '90,240,230' },
+    { name: 'The Shore', when: 'The far world', story: 'On the black sand, someone has been waiting.', art: 'shore',
+      adds: 'Everything at once, sometimes two together', bg: '#0b0907', glow: '110,80,50', speck: '255,220,180', side: [40, 30, 24], shape: 'dunes', accent: '255,200,140' },
   ];
   const INTRO = [
     { el: 0, dur: 2.1, touch: 'Swipe up', desk: 'Swipe up  ·  ↑' },
@@ -50,6 +62,7 @@
     clock: $('clock'), hint: $('hint'), banner: $('banner'), skip: $('btn-skip'),
     title: $('screen-title'), pause: $('screen-pause'), over: $('screen-over'),
     board: $('board'), boardCount: $('board-count'), boardList: $('board-list'), boardName: $('board-name'), post: $('btn-post'), streak: $('streak-line'),
+    retry: $('btn-retry'),
     finalScore: $('final-score'), again: $('btn-again'), endless: $('btn-endless'), finalStats: $('final-stats'), haptic: $('btn-haptic'), finalDetail: $('final-detail'),
     bestTitle: $('best-title'), bestOver: $('best-over'),
     sound: $('btn-sound'),
@@ -152,6 +165,29 @@
     b.save();
     b.lineJoin = 'round';
     b.lineCap = 'round';
+    if (w.art === 'notebook') { // the notebook: rows of heartbeat traces, like the pages on the desk
+      b.strokeStyle = 'rgba(255,214,150,0.4)';
+      b.lineWidth = 1.6 * U;
+      const sp = 120 * U;
+      for (let r = 0; r < 6; r++) {
+        const base = top + H * 0.06 + r * 34 * U;
+        b.globalAlpha = 1 - r * 0.13;
+        b.beginPath();
+        for (let x = 0; x <= W; x += 2) {
+          const d = ((x + r * 37 * U) % sp + sp) % sp - sp / 2;
+          const y = base - beatShape(d / U, r === 4 && Math.abs(x - cx) < sp ? 1 : 0) * U * 0.22;
+          if (x) b.lineTo(x, y); else b.moveTo(x, y);
+        }
+        b.stroke();
+      }
+      b.globalAlpha = 1;
+      b.strokeStyle = 'rgba(200,60,50,0.75)'; // the one she circled
+      b.lineWidth = 2 * U;
+      b.beginPath(); b.ellipse(cx, top + H * 0.06 + 4 * 34 * U, 30 * U, 17 * U, 0, 0, TAU); b.stroke();
+      b.restore();
+      return;
+    }
+    idx = ['scope', 'rocket', 'crossing', 'ky26', 'corridor', 'suns', 'seats', 'field', 'shore'].indexOf(w.art);
     if (idx === 0) { // the listening room: a heartbeat across a scope
       b.strokeStyle = 'rgba(90,235,190,0.1)';
       b.lineWidth = 1;
@@ -196,6 +232,13 @@
       b.strokeStyle = 'rgba(255,196,110,0.75)';
       b.lineWidth = 2 * U;
       b.beginPath(); b.arc(cx, top + H * 0.13, 12 * U, 0, TAU); b.stroke();
+      if (w.beam) { // the single line of light
+        const beam = b.createLinearGradient(0, top - 20, 0, top + H * 0.13);
+        beam.addColorStop(0, 'rgba(255,240,220,0)'); beam.addColorStop(1, 'rgba(255,240,220,0.95)');
+        b.strokeStyle = beam;
+        b.lineWidth = 3 * U;
+        b.beginPath(); b.moveTo(cx + 26 * U, top - 20); b.lineTo(cx + 4 * U, top + H * 0.13 - 18 * U); b.stroke();
+      }
     } else if (idx === 3) { // 1998 KY26: the rock itself, the gold ring open on its face
       const r = R * 0.5, y = top + r * 0.5;
       rock(b, cx, y, r, 0.95);
@@ -341,7 +384,7 @@
   function buildBackdrop() {
     // the title screen shows the asteroid; each seat shows its own landmark
     const idle = mode === 'title' || mode === 'compose';
-    const seatIdx = idle ? 3 : seatOf(level) - 1, w = WORLDS[seatIdx];
+    const seatIdx = idle ? WORLDS.findIndex((q) => q.art === 'ky26') : seatOf(level) - 1, w = WORLDS[seatIdx];
     // fixed ground with a lit lane up the middle
     ground = document.createElement('canvas');
     ground.width = canvas.width;
@@ -774,6 +817,80 @@
       .catch(() => { ui.boardCount.textContent = 'The board cannot be reached right now.'; ui.post.disabled = false; });
   }
 
+  /* ---------- Story ---------- */
+  let storyN = 0, storyT = 0, retries = 3, seatStartScore = 0;
+  const storyImg = {}, storySeen = new Set();
+  try { (localStorage.getItem('atumaa.story') || '').split(',').forEach((v) => { if (v) storySeen.add(+v); }); } catch (e) { /* storage blocked */ }
+  function loadStill(n) {
+    if (n < 1 || n > WORLDS.length || storyImg[n]) return;
+    const im = new Image();
+    im.src = 'story/' + n + '.jpg';
+    storyImg[n] = im;
+  }
+  function beginStory(n) {
+    storyN = n;
+    storyT = 0;
+    storySeen.add(n);
+    try { localStorage.setItem('atumaa.story', [...storySeen].join(',')); } catch (e) { /* storage blocked */ }
+    setMode('story');
+  }
+  function endStory() {
+    if (mode !== 'story' || storyT < 0.5) return;
+    setMode('play');
+    last = performance.now();
+    showBanner(world().name + '<small>' + seatLabel() + ' · ' + world().adds + '</small>', 2.4);
+    sfx.call();
+  }
+  function wrapText(text, x, y, maxW, lineH) {
+    let line = '';
+    for (const word of text.split(' ')) {
+      if (line && ctx.measureText(line + ' ' + word).width > maxW) { ctx.fillText(line, x, y); y += lineH; line = word; }
+      else line = line ? line + ' ' + word : word;
+    }
+    if (line) ctx.fillText(line, x, y);
+    return y + lineH;
+  }
+  function drawStory() {
+    const w = WORLDS[storyN - 1], im = storyImg[storyN], t = storyT;
+    ctx.fillStyle = '#020204';
+    ctx.fillRect(0, 0, W, H);
+    if (im && im.complete && im.naturalWidth) {
+      // cover the screen, drifting slowly
+      const k = Math.max(W / im.naturalWidth, H / im.naturalHeight) * (1.04 + t * 0.012);
+      const iw = im.naturalWidth * k, ih = im.naturalHeight * k;
+      ctx.globalAlpha = clamp(t * 2, 0, 1);
+      ctx.drawImage(im, (W - iw) / 2, (H - ih) / 2 - t * 3, iw, ih);
+      ctx.globalAlpha = 1;
+    }
+    const g = ctx.createLinearGradient(0, H * 0.35, 0, H);
+    g.addColorStop(0, 'rgba(2,2,4,0)');
+    g.addColorStop(0.55, 'rgba(2,2,4,0.82)');
+    g.addColorStop(1, 'rgba(2,2,4,0.96)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    const x = Math.max(22, field.cx - 250 * U), maxW = Math.min(W - 44, 500 * U);
+    let y = H * 0.66;
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = clamp((t - 0.25) * 2.5, 0, 1);
+    ctx.fillStyle = 'rgb(230,196,106)';
+    ctx.font = `700 ${Math.round(12.5 * U)}px ${FONT}`;
+    ctx.fillText(('SEAT ' + ROMAN[storyN - 1] + '  ·  ' + w.when).toUpperCase(), x, y);
+    y += 34 * U;
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 ${Math.round(30 * U)}px ${FONT}`;
+    y = wrapText(w.name.toUpperCase(), x, y, maxW, 34 * U) + 2 * U;
+    ctx.globalAlpha = clamp((t - 0.7) * 2, 0, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = `500 ${Math.round(16 * U)}px ${FONT}`;
+    wrapText(w.story, x, y, maxW, 23 * U);
+    ctx.globalAlpha = clamp((t - 1.6) * 2, 0, 1) * 0.7;
+    ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.round(11.5 * U)}px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(TOUCH ? 'TAP TO GO ON' : 'CLICK OR PRESS SPACE', field.cx, H - 26 * U);
+    ctx.globalAlpha = 1;
+  }
+
   let overLine = '';
   // A signal run is a transmission: thirteen signals, identical for everyone who opens it,
   // with no time meter, prizes or interval acts, so two results can be compared fairly.
@@ -949,7 +1066,13 @@
       txGap = 4 + ((rng() * 7) | 0); // every transmission has at least one silence in it
       ui.grove.textContent = 'Transmission';
       showBanner(txName() + '<small>' + TX_N + ' signals · the same for everyone who opens it</small>', 2.4);
-    } else sfx.call();
+    } else {
+      seatStartScore = score;
+      loadStill(n + 1);
+      // the first time a seat is reached, its story card comes before the signals
+      if (n <= WORLDS.length && !storySeen.has(n)) { loadStill(n); beginStory(n); }
+      else sfx.call();
+    }
   }
 
   function resetRun() {
@@ -963,6 +1086,7 @@
     rng = signal ? mulberry32(parseInt(signal.code, 16) + 1) : Math.random;
     txMode = !!signal;
     guided = !played && !signal;
+    retries = 3;
     tx.ok = 0; tx.flinch = false; tx.missed = 0;
     phrase = [];
     sigStep = 0;
@@ -976,11 +1100,27 @@
     buildBackdrop();
   }
 
-  function startGame() {
+  function startGame(at) {
     initAudio();
     resetRun();
+    const from = !txMode && Number.isInteger(at) && at > 1 ? Math.min(at, WORLDS.length) : 1;
+    if (from > 1) guided = false;
     setMode('play');
-    setupLevel(txMode ? 3 : 1);
+    setupLevel(txMode ? 3 : from);
+  }
+
+  // a fall is not the end: the seat can be replayed, three times in a run
+  function retrySeat() {
+    if (mode !== 'over' || txMode || retries <= 0) return;
+    retries--;
+    score = seatStartScore;
+    light = 1;
+    combo = 0;
+    shield = 0;
+    targets = []; ghosts = []; rings = []; texts = [];
+    bonus = null; act = null;
+    setMode('play');
+    setupLevel(level);
   }
 
   function setMode(m) {
@@ -997,7 +1137,8 @@
     }
     ui.pause.hidden = m !== 'pause';
     ui.over.hidden = m !== 'over';
-    ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose' || m === 'ending';
+    ui.hud.hidden = m === 'title' || m === 'intro' || m === 'compose' || m === 'ending' || m === 'story';
+    if (m === 'story') ui.banner.hidden = true;
     ui.skip.hidden = m !== 'intro';
     if (!playing) ui.hint.hidden = true;
     if (m === 'intro' || m === 'over' || m === 'compose') { ui.banner.hidden = true; bannerT = 0; }
@@ -1488,7 +1629,11 @@
         : 'Send it on and see who can match you.');
       ui.share.textContent = them ? 'Send it back' : sig.mine ? 'Send this signal' : 'Challenge a friend';
     }
-    ui.again.textContent = sig ? 'Rematch' : 'Try again';
+    const canRetry = !txMode && retries > 0;
+    ui.retry.hidden = !canRetry;
+    if (canRetry) ui.retry.textContent = 'Replay ' + seatLabel() + ' · ' + retries + ' left';
+    ui.again.textContent = sig ? 'Rematch' : canRetry ? 'Start over' : 'Try again';
+    ui.again.className = canRetry ? 'secondary' : 'primary';
     // finishing today's transmission keeps the daily streak going and opens the board
     const isToday = !!(sig && sig.daily === today());
     ui.streak.hidden = !isToday;
@@ -2262,6 +2407,7 @@
 
     if (mode === 'intro') { drawIntro(); return; }
     if (mode === 'title' || mode === 'compose') return;
+    if (mode === 'story') { drawStory(); return; }
     if (mode === 'ending') { drawEnding(); return; }
 
     const hx = field.cx, hy = field.heartY;
@@ -2404,6 +2550,7 @@
     if (mode === 'play' || mode === 'interlude') { if (hitStop > 0) hitStop -= dt; else update(dt); music(); }
     else if (mode === 'bonus') updateBonus(dt);
     else if (mode === 'act') updateAct(dt);
+    else if (mode === 'story') { time += dt; storyT += dt; if (storyT > 7) endStory(); }
     else if (mode === 'ending') { time += dt; endT += dt; scrollY += H * 0.04 * dt; if (endT > 8.2 && ui.endless.hidden) ui.endless.hidden = false; }
     else if (mode === 'intro') {
       time += dt;
@@ -2455,6 +2602,7 @@
   canvas.addEventListener('pointerdown', (e) => {
     initAudio();
     initHaptics();
+    if (mode === 'story') { endStory(); return; }
     if (mode === 'act') { actTap(); return; }
     if (mode === 'bonus' && bonus) {
       const i = bonus.tiles.findIndex((q) => e.clientX >= q.x && e.clientX <= q.x + q.w && e.clientY >= q.y && e.clientY <= q.y + q.h);
@@ -2522,6 +2670,7 @@
     if (mode === 'title') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'over') { if (k === ' ' || k === 'Enter') { e.preventDefault(); startGame(); } return; }
     if (mode === 'intro') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); startGame(); } return; }
+    if (mode === 'story') { if (k === ' ' || k === 'Enter' || k === 'Escape') { e.preventDefault(); endStory(); } return; }
     if (mode === 'bonus') { if (k >= '1' && k <= '6') pickBonus(+k - 1); return; }
     if (mode === 'act') { if (k === ' ' || k === 'Enter' || k.startsWith('Arrow')) { e.preventDefault(); actTap(); } return; }
     if (k === 'ArrowLeft' || k === 'a' || k === 'A' || k === 'ArrowRight' || k === 'd' || k === 'D') {
@@ -2542,9 +2691,11 @@
   window.addEventListener('blur', () => { keyHold = false; endHold(); if (mode === 'play') setMode('pause'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
 
-  $('btn-start').addEventListener('click', startGame);
+  $('btn-start').addEventListener('click', () => startGame(startSeat));
+  ui.retry.addEventListener('click', retrySeat);
+  $('btn-aim').addEventListener('click', () => { signal = null; startGame(8); });
   $('btn-how').addEventListener('click', startIntro);
-  $('btn-again').addEventListener('click', startGame);
+  $('btn-again').addEventListener('click', () => startGame());
   $('btn-resume').addEventListener('click', togglePause);
   $('btn-pause').addEventListener('click', togglePause);
   ui.skip.addEventListener('click', startGame);
@@ -2570,6 +2721,11 @@
   ui.redo.addEventListener('click', () => { taps = []; draft = null; renderCompose(); });
   ui.share.addEventListener('click', shareSignal);
   ui.free.addEventListener('click', () => { signal = null; startGame(); });
+  // ?seat=8 starts a run at that seat, for trying a world without playing up to it
+  let startSeat = 1;
+  try { const v = parseInt(new URLSearchParams(location.search).get('seat') || '', 10); if (v >= 1 && v <= WORLDS.length) startSeat = v; } catch (e) { /* no query */ }
+  loadStill(1);
+  loadStill(startSeat);
   ui.glyphTitle.addEventListener('click', () => { if (signal) { initAudio(); playMotif(signal); } });
   window.addEventListener('resize', resize);
 
