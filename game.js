@@ -97,12 +97,49 @@
     };
   }
 
+  /* ---------- Portal edition (CrazyGames) ---------- */
+  // The same game file serves atumaa.com and the portal build. The portal build's page sets
+  // ATUMAA_PORTAL and loads the portal's SDK; everything here is a no-op without them.
+  const PORTAL = window.ATUMAA_PORTAL || '';
+  const cg = { sdk: null, mute: false, playing: false };
+  function cgInit() {
+    const CG = window.CrazyGames && window.CrazyGames.SDK;
+    if (PORTAL !== 'crazygames' || !CG) return Promise.resolve();
+    return Promise.resolve().then(() => CG.init()).then(() => {
+      if (CG.environment === 'disabled') return; // running somewhere the SDK does not support
+      cg.sdk = CG;
+      try { CG.game.loadingStart(); CG.game.loadingStop(); } catch (e) { /* optional calls */ }
+      // the portal's own mute switch always wins over the game's sound settings
+      const apply = (st) => { cg.mute = !!(st && st.muteAudio); };
+      try { apply(CG.game.settings); CG.game.addSettingsChangeListener(apply); } catch (e) { /* older SDK */ }
+    }).catch(() => { /* play without the SDK */ });
+  }
+  // tell the portal when the player is actually playing, and when they are in a menu
+  function cgGameplay(on) {
+    if (!cg.sdk || cg.playing === on) return;
+    cg.playing = on;
+    try { if (on) cg.sdk.game.gameplayStart(); else cg.sdk.game.gameplayStop(); } catch (e) { /* ignore */ }
+  }
+  function cgProgress(pct) { if (cg.sdk) { try { cg.sdk.game.reportGameCompletedPercentage(pct); } catch (e) { /* ignore */ } } }
+  function cgHappy() { if (cg.sdk) { try { cg.sdk.game.happytime(); } catch (e) { /* ignore */ } } }
+  // A link back into the game. On the portal it is the portal's own invite link, never an
+  // outside address; if the SDK is not there, shares go out as text with no link at all.
+  function linkFor(params) {
+    if (PORTAL) {
+      if (cg.sdk) { try { return cg.sdk.game.inviteLink(params) || ''; } catch (e) { return ''; } }
+      return '';
+    }
+    const q = Object.keys(params).map((k) => k + '=' + params[k]).join('&');
+    return location.origin + location.pathname + (q ? '?' + q : '');
+  }
+
   /* ---------- Analytics (GoatCounter: no cookies, no personal data) ---------- */
   // Events are named like paths so they group on the dashboard. If the counter has not loaded
   // yet (or is blocked) they wait in a short queue; nothing here can break the game.
   const trackQ = [], tracked = new Set();
   let playSec = 0, trackTick = 0;
   function track(path, once) {
+    if (PORTAL) return; // the portal has its own statistics; nothing is sent elsewhere
     if (once) { if (tracked.has(path)) return; tracked.add(path); }
     if (trackQ.length < 40) trackQ.push(path);
     flushTrack();
@@ -134,9 +171,10 @@
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
-    U = clamp(Math.min(W, H * 0.6) / 400, 0.7, 1.4);
+    const wide = W > H;
+    U = wide ? clamp(H / 560, 0.7, 1.5) : clamp(Math.min(W, H * 0.6) / 400, 0.7, 1.4);
     field.cx = W / 2;
-    field.heartY = H - Math.max(120, 132 * U);
+    field.heartY = H - (wide ? Math.max(84, 92 * U) : Math.max(120, 132 * U)); // no thumb to clear on a wide screen
     field.path = Math.min(W * 0.33, 150 * U);
     buildBackdrop();
     if (TOUCH && W > H && H < 520 && mode === 'play') setMode('pause');
@@ -549,7 +587,7 @@
     const live = listening || mode === 'play' || mode === 'interlude' || (mode === 'story' && !storyReturn) || mode === 'bonus' || mode === 'act' || mode === 'ending' || mode === 'over';
     const lead = mode === 'play' ? front() : null;
     // full in play; hushed while a silence leads, during the timing acts and on the end screen
-    let want = musicOff || !live ? 0 : mode === 'act' ? 0.2 : mode === 'ending' ? 0.5 : mode === 'bonus' ? 0.45 : mode === 'over' ? 0.6 : lead && lead.shade ? 0.25 : 1;
+    let want = musicOff || cg.mute || !live ? 0 : mode === 'act' ? 0.2 : mode === 'ending' ? 0.5 : mode === 'bonus' ? 0.45 : mode === 'over' ? 0.6 : lead && lead.shade ? 0.25 : 1;
     const swap = songWant && songWant !== songName;
     if (swap) want = 0;
     songVol += clamp(want - songVol, -dt * 2.2, dt * 1.1);
@@ -568,7 +606,7 @@
     else if (!idle && song.paused) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
   }
   function tone(freq, dur, type = 'sine', vol = 0.1, when = 0, slideTo = 0) {
-    if (!ac || muted) return;
+    if (!ac || muted || cg.mute) return;
     const t = ac.currentTime + when;
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = type;
@@ -583,7 +621,7 @@
   }
   let noiseBuf = null;
   function noise(dur, vol, freq, when = 0, q = 1) {
-    if (!ac || muted) return;
+    if (!ac || muted || cg.mute) return;
     if (!noiseBuf) {
       noiseBuf = ac.createBuffer(1, Math.round(ac.sampleRate * 0.6), ac.sampleRate);
       const d = noiseBuf.getChannelData(0);
@@ -645,7 +683,7 @@
   const ROOTS = [110, 98, 82.41, 73.42, 110, 92.5, 65.41, 87.31, 98, 73.42];
   let musicNext = 0, musicStep = 0;
   function music() {
-    if (!ac || muted || musicOff || songOn()) { musicNext = 0; return; } // the synth loop is only a fallback now
+    if (!ac || muted || cg.mute || musicOff || songOn()) { musicNext = 0; return; } // the synth loop is only a fallback now
     const step = 60 / (96 + 2 * Math.min(level, 8)) / 2; // eighth notes
     if (!musicNext || musicNext < ac.currentTime - 0.3) musicNext = ac.currentTime + 0.05;
     const lead = front(), hush = !!(lead && lead.shade); // the sound falls away while a silence leads
@@ -749,17 +787,20 @@
     return code;
   }
 
-  function signalFromUrl() {
+  function signalFrom(get) {
     try {
-      const p = new URLSearchParams(location.search);
-      const m = parseInt(p.get('p') || '', 36), r = parseInt(p.get('r') || '', 10);
+      const m = parseInt(get('p') || '', 36), r = parseInt(get('r') || '', 10);
       let sig;
-      if (p.has('daily')) { const d = p.get('daily') || ''; sig = dailySignal(/^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : today()); }
-      else sig = makeSignal((p.get('s') || '').toLowerCase(), null, false);
+      const d = get('daily');
+      if (d != null) sig = dailySignal(/^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today() ? d : today());
+      else sig = makeSignal((get('s') || '').toLowerCase(), null, false);
       // the sender's result, to play against
       if (sig && Number.isFinite(m) && m >= 0 && Number.isFinite(r) && r >= 0 && r <= TX_N) sig.theirs = { r, p: m };
       return sig;
     } catch (e) { return null; }
+  }
+  function signalFromUrl() {
+    try { const p = new URLSearchParams(location.search); return signalFrom((k) => p.get(k)); } catch (e) { return null; }
   }
 
   // one signal a day, the same for everyone: the date is hashed into a signal code
@@ -785,7 +826,8 @@
   }
 
   function signalUrl(sig, mark) {
-    return location.origin + location.pathname + (sig.daily ? '?daily=' + sig.daily : '?s=' + sig.code) + '&p=' + Math.round(mark).toString(36) + '&r=' + tx.ok;
+    const res = { p: Math.round(mark).toString(36), r: tx.ok };
+    return linkFor(sig.daily ? { daily: sig.daily, ...res } : { s: sig.code, ...res });
   }
 
   // every signal has its own mark: six points set around a ring by its rhythm
@@ -876,16 +918,16 @@
   // "I made this for you": the rhythm goes out with no score attached
   function shareDraft() {
     if (!draft) return;
-    const url = location.origin + location.pathname + '?s=' + draft.code;
+    const url = linkFor({ s: draft.code });
     const text = 'I made a signal for you. Can you answer it?';
     track('signal/sent');
     const note = (msg) => { ui.composeNote.textContent = msg; };
     const copy = () => {
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
-      else note(text + ' ' + url);
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + (url ? ' ' + url : '')).then(() => note('Copied. Paste it to a friend.'), () => note(text + (url ? ' ' + url : '')));
+      else note(text + (url ? ' ' + url : ''));
     };
     if (!navigator.share) { copy(); return; }
-    navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
+    navigator.share({ title: 'Atumaa — The Seventh Seat', text, ...(url ? { url } : {}) }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
   }
 
   function playDraft() {
@@ -1046,13 +1088,43 @@
     const w = WORLDS[storyN - 1], im = storyImg[storyN], t = storyT;
     ctx.fillStyle = '#020204';
     ctx.fillRect(0, 0, W, H);
+    const wide = W > H * 1.15;
     if (im && im.complete && im.naturalWidth) {
       // cover the screen, drifting slowly
       const k = Math.max(W / im.naturalWidth, H / im.naturalHeight) * (1.04 + t * 0.012);
       const iw = im.naturalWidth * k, ih = im.naturalHeight * k;
-      ctx.globalAlpha = clamp(t * 2, 0, 1);
+      ctx.globalAlpha = clamp(t * 2, 0, 1) * (wide ? 0.22 : 1);
       ctx.drawImage(im, (W - iw) / 2, (H - ih) / 2 - t * 3, iw, ih);
+      if (wide) {
+        // the stills are upright, so on a wide screen the whole picture stands at the right
+        const hh = H * 0.92 * (1 + t * 0.006), ww = hh * (im.naturalWidth / im.naturalHeight);
+        ctx.globalAlpha = clamp(t * 2, 0, 1);
+        ctx.drawImage(im, W * 0.72 - ww / 2, (H - hh) / 2, ww, hh);
+      }
       ctx.globalAlpha = 1;
+    }
+    if (wide) {
+      const x = W * 0.08, maxW = W * 0.4;
+      let y = H * 0.36;
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = clamp((t - 0.25) * 2.5, 0, 1);
+      ctx.fillStyle = 'rgb(230,196,106)';
+      ctx.font = `700 ${Math.round(13 * U)}px ${FONT}`;
+      ctx.fillText(((storyN > 7 ? 'BEYOND THE SEVENTH SEAT  ·  ' : '') + 'SEAT ' + ROMAN[storyN - 1] + '  ·  ' + w.when).toUpperCase(), x, y);
+      y += 40 * U;
+      ctx.fillStyle = '#fff';
+      ctx.font = `700 ${Math.round(34 * U)}px ${FONT}`;
+      y = wrapText(w.name.toUpperCase(), x, y, maxW, 38 * U) + 6 * U;
+      ctx.globalAlpha = clamp((t - 0.7) * 2, 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = `500 ${Math.round(18 * U)}px ${FONT}`;
+      y = wrapText(w.story, x, y, maxW, 26 * U);
+      ctx.globalAlpha = clamp((t - 1.6) * 2, 0, 1) * 0.7;
+      ctx.fillStyle = '#fff';
+      ctx.font = `600 ${Math.round(12 * U)}px ${FONT}`;
+      ctx.fillText(storyN === 1 && !storyHeld ? 'CLICK OR PRESS SPACE TO ANSWER IT' : 'CLICK OR PRESS SPACE', x, y + 18 * U);
+      ctx.globalAlpha = 1;
+      return;
     }
     const g = ctx.createLinearGradient(0, H * 0.35, 0, H);
     g.addColorStop(0, 'rgba(2,2,4,0)');
@@ -1160,7 +1232,7 @@
     }
     g.fillStyle = gold;
     g.font = `700 54px ${FONT}`;
-    g.fillText('atumaa.com', cx, 1840);
+    g.fillText(PORTAL ? 'ATUMAA' : 'atumaa.com', cx, 1840);
     return cv;
   }
 
@@ -1178,18 +1250,18 @@
 
   function shareSignal() {
     track(txMode ? 'share/challenge' : 'share/run');
-    const url = signal ? signalUrl(signal, score) : location.origin + location.pathname;
+    const url = signal ? signalUrl(signal, score) : linkFor({});
     const lead = !signal ? '' : signal.daily ? dayLabel(signal.daily) + '. ' : signal.mine ? 'I sent you a signal. Answer it. ' : 'I answered this signal. Your turn. ';
     const text = txMode ? resultLine() : lead + resultLine();
     const note = (msg) => { ui.shareNote.textContent = msg; };
     const copy = () => {
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => note('Copied. Paste it to a friend.'), () => note(text + ' ' + url));
-      else note(text + ' ' + url);
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + (url ? ' ' + url : '')).then(() => note('Copied. Paste it to a friend.'), () => note(text + (url ? ' ' + url : '')));
+      else note(text + (url ? ' ' + url : ''));
     };
     if (!navigator.share) { copy(); return; }
     let withCard = false;
     try { withCard = !!(cardFile && navigator.canShare && navigator.canShare({ files: [cardFile] })); } catch (e) { withCard = false; }
-    navigator.share(withCard ? { files: [cardFile], text: text + ' ' + url } : { title: 'Atumaa — The Seventh Seat', text, url })
+    navigator.share(withCard ? { files: [cardFile], text: text + (url ? ' ' + url : '') } : { title: 'Atumaa — The Seventh Seat', text, ...(url ? { url } : {}) })
       .catch((err) => { if (!err || err.name !== 'AbortError') copy(); }); // closing the sheet is not a failure
   }
 
@@ -1278,6 +1350,7 @@
     } else {
       seatStartScore = score;
       reachSeat(n);
+      cgProgress(Math.min(90, (Math.min(n, LAST) - 1) * 10));
       track('seat/' + String(Math.min(n, 10)).padStart(2, '0'));
       loadStill(n + 1);
       // the first time a seat is reached, its story card comes before the signals
@@ -1341,6 +1414,7 @@
 
   function setMode(m) {
     mode = m;
+    cgGameplay(m === 'play' || m === 'interlude' || m === 'bonus' || m === 'act');
     const playing = m === 'play' || m === 'interlude';
     ui.title.hidden = m !== 'title';
     ui.compose.hidden = m !== 'compose';
@@ -1802,6 +1876,8 @@
   function startEnding(kind) {
     endKind = kind || 'seat';
     track('ending/' + endKind);
+    cgHappy();
+    if (endKind === 'shore') cgProgress(100);
     ui.endless.textContent = endKind === 'shore' ? 'Keep playing' : 'Go beyond';
     ui.endShare.textContent = 'Share this';
     score += 1400;
@@ -3104,14 +3180,14 @@
   try { ui.boardName.value = cleanName(localStorage.getItem('atumaa.name')); } catch (e) { /* storage blocked */ }
   ui.endless.addEventListener('click', () => { setMode('play'); setupLevel(level + 1); });
   ui.endShare.addEventListener('click', () => {
-    const url = location.origin + location.pathname;
+    const url = linkFor({});
     track('share/ending');
     const text = endKind === 'shore' ? 'I answered all ten seats in ATUMAA. The one on the shore answered back.' : 'I took the seventh seat in ATUMAA. It was looking for me. Can you take yours?';
     const copy = () => {
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + ' ' + url).then(() => { ui.endShare.textContent = 'Copied'; }, () => {});
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text + (url ? ' ' + url : '')).then(() => { ui.endShare.textContent = 'Copied'; }, () => {});
     };
     if (!navigator.share) { copy(); return; }
-    navigator.share({ title: 'Atumaa — The Seventh Seat', text, url }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
+    navigator.share({ title: 'Atumaa — The Seventh Seat', text, ...(url ? { url } : {}) }).catch((err) => { if (!err || err.name !== 'AbortError') copy(); });
   });
   syncToggles();
   for (const id of ['btn-start', 'btn-again', 'btn-resume', 'btn-skip', 'btn-signal', 'btn-compose', 'btn-play-signal', 'btn-share', 'btn-daily', 'btn-daily2']) $(id).addEventListener('pointerdown', () => { initHaptics(); buzz(HAPTIC.tap); });
@@ -3140,7 +3216,7 @@
   // opened from a friend's link: their signal is waiting on the title screen
   signal = signalFromUrl();
   if (signal) track(signal.daily ? 'opened/daily-link' : signal.theirs ? 'opened/challenge-link' : 'opened/signal-link');
-  if (signal) {
+  function showWaitingSignal() {
     ui.glyphTitle.hidden = false;
     drawGlyph(ui.glyphTitle, signal);
     ui.premise.textContent = signal.theirs ? 'A friend answered ' + signal.theirs.r + ' of ' + TX_N + '. Same signals, same timing. Your turn.'
@@ -3148,6 +3224,16 @@
       : 'Someone tapped this signal for you. ' + TX_N + ' signals in their rhythm. Answer it.';
     ui.start.textContent = 'Answer it';
   }
+  if (signal) showWaitingSignal();
+  // iOS suspends audio when the app is left; it may only be resumed from a touch
+  for (const ev of ['touchend', 'click']) document.addEventListener(ev, () => { if (ac && ac.state === 'suspended') ac.resume(); });
+  // on the portal, a friend's invite arrives through the SDK once it has started
+  cgInit().then(() => {
+    const inv = cg.sdk && cg.sdk.game.inviteParams;
+    if (!inv || signal) return;
+    signal = signalFrom((k) => (inv[k] == null ? null : String(inv[k])));
+    if (signal) { showWaitingSignal(); if (mode === 'title') setMode('title'); }
+  });
   resize();
   setMode('title');
   requestAnimationFrame(frame);
