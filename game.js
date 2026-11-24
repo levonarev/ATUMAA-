@@ -440,9 +440,71 @@
   /* ---------- Audio ---------- */
   let ac = null, muted = false;
   function initAudio() {
-    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    if (ac) { if (ac.state === 'suspended') ac.resume(); unlockSong(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC) { try { ac = new AC(); } catch (e) { ac = null; } }
+    unlockSong();
+  }
+
+  /* ---------- Soundtrack: Project LA ---------- */
+  // One track per stretch of the story. `tonic` is the track's key note, so the sounds the
+  // player makes (answers, the call and reply, fanfares) are tuned to sit inside the music.
+  const TRACKS = {
+    prelude: { src: 'music/prelude.mp3', tonic: 440.0 },           // A
+    marionettes: { src: 'music/marionettes.mp3', tonic: 493.88 },  // B
+    afterwords: { src: 'music/afterwords.mp3', tonic: 392.0 },     // G
+  };
+  const trackFor = (seat) => (seat <= 3 ? 'prelude' : seat <= 7 ? 'marionettes' : 'afterwords');
+  // tonic, second, fourth and fifth: notes that fit a major or a minor key alike
+  const DEGREES = [1, 1.1225, 1.3348, 1.4983];
+  let song = null, songGain = null, songName = '', songWant = '', songVol = 0, songFailed = false;
+  const songOn = () => !!(song && songName && !songFailed);
+  const keyNote = () => (songOn() ? TRACKS[songName].tonic : 392);
+  const noteOf = (el) => keyNote() * DEGREES[el];
+
+  // Phones only let a page start audio from inside a tap, so the player is created and started
+  // (silently) on the first one; after that it can change track by itself.
+  function unlockSong() {
+    if (song) return;
+    song = new Audio();
+    song.loop = true;
+    song.preload = 'auto';
+    song.addEventListener('error', () => { songFailed = true; });
+    if (ac && location.protocol !== 'file:') {
+      try {
+        songGain = ac.createGain();
+        songGain.gain.value = 0;
+        ac.createMediaElementSource(song).connect(songGain).connect(ac.destination);
+      } catch (e) { songGain = null; }
+    }
+    if (!songGain) { song.volume = 0; song.muted = true; }
+    songName = songWant || 'prelude';
+    song.src = TRACKS[songName].src;
+    const p = song.play();
+    if (p && p.catch) p.catch(() => { /* will be retried from the next tap */ });
+  }
+  function playSong(name) { songWant = name; }
+
+  function tickSong(dt) {
+    if (!song || songFailed) return;
+    const live = mode === 'play' || mode === 'interlude' || mode === 'story' || mode === 'bonus' || mode === 'act' || mode === 'ending' || mode === 'over';
+    const lead = mode === 'play' ? front() : null;
+    // full in play; hushed while a silence leads, during the timing acts and on the end screen
+    let want = muted || !live ? 0 : mode === 'act' ? 0.1 : mode === 'bonus' ? 0.25 : mode === 'over' ? 0.3 : lead && lead.shade ? 0.16 : 0.62;
+    const swap = songWant && songWant !== songName;
+    if (swap) want = 0;
+    songVol += clamp(want - songVol, -dt * 1.4, dt * 0.7);
+    if (swap && songVol <= 0.01) {
+      songName = songWant;
+      song.src = TRACKS[songName].src;
+      const p = song.play();
+      if (p && p.catch) p.catch(() => {});
+    }
+    if (songGain) songGain.gain.value = songVol;
+    else { song.volume = clamp(songVol, 0, 1); song.muted = songVol < 0.02; }
+    const idle = songVol <= 0.01 && want === 0 && !swap;
+    if (idle && !song.paused) song.pause();
+    else if (!idle && song.paused) { const p = song.play(); if (p && p.catch) p.catch(() => {}); }
   }
   function tone(freq, dur, type = 'sine', vol = 0.1, when = 0, slideTo = 0) {
     if (!ac || muted) return;
@@ -522,7 +584,7 @@
   const ROOTS = [110, 98, 82.41, 73.42, 110, 92.5, 65.41, 87.31, 98, 73.42];
   let musicNext = 0, musicStep = 0;
   function music() {
-    if (!ac || muted) { musicNext = 0; return; }
+    if (!ac || muted || songOn()) { musicNext = 0; return; } // the synth loop is only a fallback now
     const step = 60 / (96 + 2 * Math.min(level, 8)) / 2; // eighth notes
     if (!musicNext || musicNext < ac.currentTime - 0.3) musicNext = ac.currentTime + 0.05;
     const lead = front(), hush = !!(lead && lead.shade); // the sound falls away while a silence leads
@@ -541,14 +603,14 @@
   const sfx = {
     tap: () => tone(880, 0.035, 'sine', 0.03),
     // the asteroid calls in four notes at the start of a seat; clearing the seat answers in three
-    call: () => { const r = ROOTS[seatOf(level) - 1] * 4; [1, 1.5, 1.335, 2].forEach((m, i) => tone(r * m, 0.32, 'sine', 0.05, 0.3 + i * 0.17)); },
-    reply: () => { const r = ROOTS[seatOf(level) - 1] * 4; [2, 1.5, 2.67].forEach((m, i) => { tone(r * m, 0.7, 'triangle', 0.075, i * 0.16); tone(r * m * 2, 0.7, 'sine', 0.03, i * 0.16); }); },
+    call: () => { const r = songOn() ? keyNote() : ROOTS[seatOf(level) - 1] * 4; [1, 1.5, 1.335, 2].forEach((m, i) => tone(r * m, 0.32, 'sine', 0.05, 0.3 + i * 0.17)); },
+    reply: () => { const r = songOn() ? keyNote() : ROOTS[seatOf(level) - 1] * 4; [2, 1.5, 2.67].forEach((m, i) => { tone(r * m, 0.7, 'triangle', 0.075, i * 0.16); tone(r * m * 2, 0.7, 'sine', 0.03, i * 0.16); }); },
     tally: (k) => tone(900 + k * 500, 0.03, 'square', 0.018),
-    perfect: () => [1046.5, 1318.5, 1568, 2093].forEach((f, i) => tone(f, 0.35, 'sine', 0.06, 0.75 + i * 0.07)),
-    best: () => [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.5, 'triangle', 0.07, i * 0.09)),
+    perfect: () => [2, 2.6697, 2.9966, 4].forEach((m, i) => tone(keyNote() * m, 0.35, 'sine', 0.06, 0.75 + i * 0.07)),
+    best: () => [1, 1.3348, 1.4983, 2, 2.6697].forEach((m, i) => tone(keyNote() * m, 0.5, 'triangle', 0.07, i * 0.09)),
     hit: (el, step) => {
       noise(0.05, 0.1, el === 3 ? 500 : 1900, 0, 1.2);
-      const f = ELEMENTS[el].note * (1 + Math.min(step, 12) * 0.03);
+      const f = noteOf(el); // always in the key of the music, so a streak plays a tune over it
       if (el === 0) tone(f, 0.16, 'triangle', 0.09, 0, f * 1.6);
       else if (el === 1) tone(f, 0.2, 'sine', 0.1, 0, f * 0.6);
       else if (el === 2) { tone(f, 0.12, 'triangle', 0.08); tone(f * 1.5, 0.22, 'triangle', 0.08, 0.07); }
@@ -559,7 +621,7 @@
     leak: () => { tone(120, 0.45, 'sawtooth', 0.09, 0, 50); tone(90, 0.3, 'square', 0.04, 0.03, 45); noise(0.4, 0.2, 180, 0, 0.7); },
     pass: () => tone(660, 0.25, 'sine', 0.05, 0, 880),
     dawn: () => [392, 523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.8, 'sine', 0.07, i * 0.11)),
-    over: () => [392, 329.63, 261.63, 196].forEach((f, i) => tone(f, 0.7, 'triangle', 0.08, i * 0.22)),
+    over: () => [1, 0.7492, 0.6674, 0.5].forEach((m, i) => tone(keyNote() * m, 0.7, 'triangle', 0.08, i * 0.22)),
   };
 
   /* ---------- State ---------- */
@@ -1065,9 +1127,11 @@
       bonusDone = true;
       txGap = 4 + ((rng() * 7) | 0); // every transmission has at least one silence in it
       ui.grove.textContent = 'Transmission';
+      playSong('prelude');
       showBanner(txName() + '<small>' + TX_N + ' signals · the same for everyone who opens it</small>', 2.4);
     } else {
       seatStartScore = score;
+      playSong(trackFor(seatOf(n)));
       loadStill(n + 1);
       // the first time a seat is reached, its story card comes before the signals
       if (n <= WORLDS.length && !storySeen.has(n)) { loadStill(n); beginStory(n); }
@@ -1253,13 +1317,13 @@
     // the gamble: answer early and safe, or let it come close for much more
     const close = near > 0.7;
     const pts = Math.round((close ? 30 : 10 + 14 * near) * multiplier() * (t.mirror || t.cloak ? 1.5 : 1));
-    phrase.push(ELEMENTS[el].note);
+    phrase.push(noteOf(el));
     if (phrase.length > 7) phrase.shift();
     if (close) {
       // the seat sends a gold wave back up the lane, and the note gains a fifth
       rings.push({ x: field.cx, y: field.heartY, r: 20, max: (field.heartY - field.top) * 1.05, life: 0.6, rgb: '230,196,106' });
       heartPulse = 1;
-      tone(ELEMENTS[el].note * 1.5, 0.32, 'sine', 0.07, 0.03);
+      tone(noteOf(el) * 1.4983, 0.32, 'sine', 0.07, 0.03);
     } else {
       rings.push({ x: field.cx, y: field.heartY, r: 14, max: 44 * U, life: 0.3, rgb: world().accent });
       if (t.wait) texts.push({ x: field.cx, y: H * 0.46, text: 'Early. Next time wait for the glow', life: 1.6, rgb: '230,196,106', size: 17 });
@@ -1522,9 +1586,10 @@
     endT = 0;
     setMode('ending');
     buzz(HAPTIC.seat);
-    [1, 1.5, 1.335, 2].forEach((m, i) => tone(196 * m, 0.55, 'sine', 0.08, 1.0 + i * 0.3));
-    for (let i = 0; i < 6; i++) tone(SIG_NOTES[i], 0.5, 'triangle', 0.07, 2.8 + i * 0.42);
-    (phrase.length ? phrase : [392, 523.25, 587.33]).forEach((f, i) => { tone(f, 0.5, 'triangle', 0.09, 5.8 + i * 0.27); tone(f * 2, 0.5, 'sine', 0.04, 5.8 + i * 0.27); });
+    const k = keyNote();
+    [1, 1.4983, 1.3348, 2].forEach((m, i) => tone((k / 2) * m, 0.55, 'sine', 0.08, 1.0 + i * 0.3));
+    [1, 1.1225, 1.3348, 1.4983, 2, 2.245].forEach((m, i) => tone(k * m, 0.5, 'triangle', 0.07, 2.8 + i * 0.42));
+    (phrase.length ? phrase : [k, k * 1.3348, k * 1.4983]).forEach((f, i) => { tone(f, 0.5, 'triangle', 0.09, 5.8 + i * 0.27); tone(f * 2, 0.5, 'sine', 0.04, 5.8 + i * 0.27); });
   }
 
   function drawEnding() {
@@ -2571,6 +2636,7 @@
       bannerT -= dt;
       if (bannerT <= 0) ui.banner.hidden = true;
     }
+    tickSong(dt);
     updateHud();
     draw();
     requestAnimationFrame(frame);

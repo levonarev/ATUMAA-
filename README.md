@@ -124,6 +124,15 @@ Time now runs down by itself (about 90 seconds from full in Seat I, faster later
 gives a little back and each cleared seat gives a quarter. A missed signal costs less in the
 first seats than later. A Gap appears once in Seat I so it is met early.
 
+## Soundtrack
+
+Music by Project LA, in `music/`. One track per stretch of the story, cross-faded at seat
+changes: *Prelude* (Seats I–III and transmissions), *Dance of Marionettes* (Seats IV–VII and
+the ending), *After Words* (Seats VIII–X). The music drops low while a Gap leads, during the
+timing acts and on the end screen. The sounds the player makes are tuned to each track's key
+(`TRACKS` in `game.js`), so answers play in tune over the music. The synthesised loop remains
+only as a fallback if a track cannot load.
+
 ## Feel and sound
 
 - **Haptics:** every event has its own light vibration: touch, tap, swipe, each kind of hit, a
@@ -150,6 +159,7 @@ python3 -m http.server 8000
 - `style.css` — styling
 - `game.js` — the whole game (canvas rendering, gestures, audio)
 - `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png`, `og.png` — install and link-preview assets
+- `music/` — the soundtrack
 - `story/` — one still per seat, taken from the film's episodes
 - `backend/` — the board server and how to deploy it (not served as part of the game)
 - `CNAME` — custom domain for GitHub Pages
