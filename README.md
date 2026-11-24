@@ -135,6 +135,18 @@ Both endings can be shared. Play continues from each.
 - **Link previews:** `og.png`, `manifest.webmanifest` and the app icons give shared links a
   proper card and let the game be added to a home screen.
 
+## Keeping a session going
+
+- **Gentler first seats.** In Seats I–III the meter drains more slowly, mistakes and misses
+  cost less and answers give more back. From Seat IV the game is as hard as before.
+- **No dead ends.** After a fall the main button always leads on: replay the seat (three per
+  run), then play that seat again with a fresh score. A fall never sends the player back to
+  Seat I unless they choose it. The end screen also offers today's transmission and the
+  composer, and says what the run added to the collection.
+- **Progress that carries over.** The furthest seat reached is kept, and the title offers
+  "Continue · Seat N". Story stills unlock as seats are reached and tracks as they are heard;
+  the Collection screen shows them, replays a still's story card and plays an unlocked track.
+
 ## Difficulty
 
 Time now runs down by itself (about 90 seconds from full in Seat I, faster later). Every answer

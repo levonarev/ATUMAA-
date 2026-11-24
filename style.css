@@ -301,3 +301,16 @@ button.secondary:hover { filter: brightness(1.3); }
 #btn-endshare { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(40px, 9vh) + 66px); z-index: 5; margin: 0; white-space: nowrap; }
 #compose-note { margin: 8px 0 0; min-height: 0; -webkit-user-select: text; user-select: text; word-break: break-word; }
 #compose-note:empty { margin: 0; }
+
+/* ---------- Collection ---------- */
+#collection-count { margin: -6px 0 14px; }
+#stills { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.still { position: relative; aspect-ratio: 9 / 14; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: #0b0d16 center / cover no-repeat; color: #fff; font-family: inherit; cursor: pointer; overflow: hidden; }
+.still span { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 5px 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.25; background: linear-gradient(rgba(2, 2, 4, 0), rgba(2, 2, 4, 0.9)); }
+.still.locked { cursor: default; background: repeating-linear-gradient(135deg, #0b0d16 0 8px, #0e111c 8px 16px); color: var(--muted); }
+.still.locked span { background: none; }
+#tracklist { display: grid; gap: 6px; margin: 8px 0 14px; }
+#tracklist .track { margin: 0; width: 100%; text-align: left; }
+#tracklist .track.on { border-color: var(--gold); color: var(--gold); }
+#tracklist .track:disabled { opacity: 0.45; cursor: default; }
+#unlocked-line { margin: 0 0 12px; font-size: 14px; text-wrap: balance; }

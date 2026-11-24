@@ -61,6 +61,8 @@
     <button id="btn-daily" class="secondary" type="button">Today's transmission</button>
     <button id="btn-signal" class="secondary" type="button">Send a signal</button>
     <p class="controls">Swipe to answer. Wait for the glow to score higher. Let the silence pass.</p>
+    <button id="btn-restart" class="linkish" type="button" hidden>Start from Seat I</button>
+    <button id="btn-collection" class="linkish" type="button" hidden>Collection</button>
     <button id="btn-how" class="linkish" type="button">How to play</button>
     <p id="best-title" class="best"></p>
     <p class="credit">Music by Project LA</p>
@@ -83,6 +85,17 @@
   </div>
 </section>
 
+<section id="screen-collection" class="screen" hidden>
+  <div class="panel">
+    <h2>Collection</h2>
+    <p id="collection-count" class="controls"></p>
+    <div id="stills"></div>
+    <p class="credit">Music by Project LA</p>
+    <div id="tracklist"></div>
+    <button id="btn-collection-back" class="secondary" type="button">Back</button>
+  </div>
+</section>
+
 <section id="screen-pause" class="screen" hidden>
   <div class="panel small">
     <h2>Paused</h2>
@@ -101,6 +114,7 @@
     <p id="final-detail" class="controls"></p>
     <dl id="final-stats"></dl>
     <p id="best-over" class="best"></p>
+    <p id="unlocked-line" class="best" hidden></p>
     <p id="final-tip" class="tip" hidden></p>
     <canvas id="glyph-over" class="glyph" width="192" height="192" hidden></canvas>
     <p id="signal-result" hidden></p>
@@ -118,6 +132,7 @@
     <button id="btn-share" class="primary" type="button">Share this run</button>
     <p id="share-note" class="controls"></p>
     <button id="btn-again" class="primary" type="button">Try again</button>
+    <button id="btn-fromone" class="secondary" type="button" hidden>Start from Seat I</button>
     <button id="btn-daily2" class="secondary" type="button">Today's transmission</button>
     <button id="btn-compose" class="secondary" type="button">Send a signal of your own</button>
     <button id="btn-free" class="secondary" type="button" hidden>Free play</button>
