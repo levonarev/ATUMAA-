@@ -21,15 +21,22 @@ Play starts at once. A ten-second briefing, reached from How to play on the titl
 accelerating, it is sending a signal) and shows every gesture. Then seven seats, each a place
 from the trailer that adds one complication on top of the last:
 
-| Seat | World | Adds |
-| --- | --- | --- |
-| I | The Listening Room | Pulse and Echo |
-| II | Launch | Flare |
-| III | The Crossing | Gaps of missing time |
-| IV | 1998 KY26 | Lock |
-| V | The Corridor | Bound signals (several gestures in a row) |
-| VI | Twin Suns | Mirrored signals (swipe the opposite way) |
-| VII | The Seventh Seat | Cloaked signals (revealed late) |
+| Seat | World | When | Adds |
+| --- | --- | --- | --- |
+| I | The Listening Room | November 2026 | Pulse and Echo |
+| II | First Contact | July 2031 | Flare |
+| III | The Notebook | Three days later | Gaps of missing time |
+| IV | Launch | 2032 | Lock |
+| V | Day 212 | At 1998 KY26 | Bound signals (several gestures in a row) |
+| VI | The Corridor | Inside | Mirrored signals (swipe the opposite way) |
+| VII | The Seventh Seat | The chamber | Cloaked signals (revealed late) |
+
+The first time a seat is reached, a story card appears before the signals: a still from the
+film (`story/1.jpg` to `story/10.jpg`), the date and two or three lines of story. The text lives
+in the `WORLDS` table at the top of `game.js`. A fall is not the end of a run: the seat can be
+replayed up to three times, with the score put back to what it was at the start of that seat.
+`?seat=8` (any number from 1 to 10) starts a run at that seat, and the title screen has a
+link straight to the aiming seats.
 
 After Seat VII the game continues in faster cycles. Story text is kept in the `WORLDS`, `INTRO`
 and `ELEMENTS` tables at the top of `game.js`.
@@ -80,9 +87,9 @@ dangerous in its own lane. Speed and the mix of signals drop back when aiming is
 
 | Seat | World | Adds |
 | --- | --- | --- |
-| VIII | The Field | Two lanes, slow, simple signals |
-| IX | The Shore | Three lanes; bound and mirrored signals return |
-| X | The Answer | Everything, and sometimes two signals at once |
+| VIII | Twin Suns | Two lanes, slow, simple signals |
+| IX | The Field | Three lanes; bound and mirrored signals return |
+| X | The Shore | Everything, and sometimes two signals at once |
 
 After Seat X the last seat repeats in faster cycles.
 
@@ -143,5 +150,6 @@ python3 -m http.server 8000
 - `style.css` — styling
 - `game.js` — the whole game (canvas rendering, gestures, audio)
 - `manifest.webmanifest`, `icon-*.png`, `apple-touch-icon.png`, `og.png` — install and link-preview assets
+- `story/` — one still per seat, taken from the film's episodes
 - `backend/` — the board server and how to deploy it (not served as part of the game)
 - `CNAME` — custom domain for GitHub Pages
